@@ -1,0 +1,12 @@
+import { Button } from "std-widgets.slint";
+export component App {
+    
+    button := Button { 
+        text: "button";
+        clicked => {
+            button-clicked()
+        }
+     }
+
+     callback button_clicked();
+}
