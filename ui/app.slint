@@ -12,6 +12,9 @@ export component App inherits Window {
 
     callback searched <=> search_bar.accepted;
 
+    in property <string> name;
+    title <=> name;
+
 
     HorizontalLayout {
         sidebar := Sidebar {

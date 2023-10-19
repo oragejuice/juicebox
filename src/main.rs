@@ -2,7 +2,9 @@
 mod controller;
 mod scraper;
 
-use tokio::sync::mpsc;
+use std::sync::Arc;
+
+use tokio::sync::{mpsc, Mutex};
 use rodio::{OutputStream, Sink};
 
 slint::include_modules!();
@@ -51,8 +53,7 @@ async fn main() -> Result<(), slint::PlatformError>{
 
 
     let gui = App::new().unwrap();
-
-
+    let gui_weak = gui.as_weak();
 
     let playback_loop: mpsc::UnboundedSender<Option<String>> = juiceloop!(
         download_url,
@@ -62,6 +63,11 @@ async fn main() -> Result<(), slint::PlatformError>{
             match results {
                 Ok(file) => {
                     controller.play_file(*file);
+                    let gui_copy = gui_weak.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let gui = gui_copy.unwrap();
+                        let _ = gui.set_name("currently playing".into());
+                    });
                 }
                 Err(_) => ()
             }
@@ -74,7 +80,11 @@ async fn main() -> Result<(), slint::PlatformError>{
         scraper::search_for(query.as_str()),
         { 
             match results {
-                Ok(res) => println!("results.. \n {:?}", res),
+                Ok(res) => {
+
+
+                    println!("results.. \n {:?}", res);
+                },
                 Err(_) => ()
             }
         }
