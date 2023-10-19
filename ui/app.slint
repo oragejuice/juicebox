@@ -1,12 +1,32 @@
-import { Button } from "std-widgets.slint";
-export component App {
-    
-    button := Button { 
-        text: "button";
-        clicked => {
-            button-clicked()
-        }
-     }
 
-     callback button_clicked();
+import {Sidebar} from "sidebar.slint";
+import {SearchBar} from "searchbar.slint";
+
+export component App inherits Window {
+    preferred-width: 640px;
+    preferred-height: 480px;
+
+    callback skip_back <=> sidebar.skip_back;
+    callback play_pause <=> sidebar.play_pause;
+    callback skip_forward <=> sidebar.skip_forward;
+
+    callback searched <=> search_bar.accepted;
+
+
+    HorizontalLayout {
+        sidebar := Sidebar {
+            
+        }
+        VerticalLayout {
+            search_bar := SearchBar {
+
+            }
+            main_screen := Rectangle {
+                background: #2b2b2b;
+                min-width: 460px;
+            }
+        }
+
+    }
+
 }

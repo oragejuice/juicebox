@@ -1,0 +1,29 @@
+
+import { LineEdit } from "std-widgets.slint";
+
+export component SearchBar inherits Rectangle {
+
+
+    callback accepted(string);
+
+    padding-top: 3px;
+    height: 20px;
+
+    Rectangle {
+
+        width: 90%;
+
+        HorizontalLayout {
+            alignment: center;
+            search_box := LineEdit {
+                font-size: 16px;
+                width: 100%;
+
+                accepted => {
+                    root.accepted(self.text);
+                }
+            }
+        }
+    }
+
+}

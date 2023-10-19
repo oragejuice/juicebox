@@ -1,0 +1,65 @@
+component MediaButton inherits TouchArea {
+
+    in property <image> image-url;
+    width: 30px;
+    height: 30px;
+    icon := Image {
+        width: 30px;
+        height: 30px;
+        source: image-url;
+    }
+}
+
+export component Sidebar inherits Rectangle {
+    width: 180px;
+    background: #1b1b1b;
+
+    callback skip_back <=> skip_back.clicked;
+    callback play_pause <=> play.clicked;
+    callback skip_forward <=> skip_forward.clicked;
+
+
+    VerticalLayout {
+        alignment: start;
+        padding-top: 15px;
+        padding-bottom: 30px;
+        spacing: 10px;
+
+        art := Rectangle {   
+            //width: 120px;
+            //height: 120px;
+            Image {
+                height: 120px;
+                width: 120px;
+                source: @image-url("img/cover_art.jpg");
+            }
+        }
+
+        title := Text {
+            text: "currently playing";
+            horizontal-alignment: center;
+            font-size: 16px;
+        }
+
+        media_controls := Rectangle {
+
+
+            HorizontalLayout {
+                alignment: space-around;
+                padding-left: 30px;
+                padding-right: 30px;
+
+                skip_back := MediaButton {
+                    image-url: @image-url("img/skip.png");
+                }
+                play := MediaButton {
+                    image-url: @image-url("img/play.png");
+                }
+                skip_forward := MediaButton {
+                    image-url: @image-url("img/skip.png");
+                }
+
+            }
+        }
+    }
+}
