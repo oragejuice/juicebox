@@ -34,16 +34,14 @@ export component App inherits Window {
 
             search_bar := SearchBar {}
             
-            if(pop_out.current_item == 0) : Home{}
-            if(pop_out.current_item == 1) : Search {}
-            if(pop_out.current_item == 2) : Playlists {}
-            if(pop_out.current_item == 3) : Settings {}
+            if(search-bar.current_item == 0) : Home{}
+            if(search-bar.current_item == 1) : Search {}
+            if(search-bar.current_item == 2) : Playlists {}
+            if(search-bar.current_item == 3) : Settings {}
         }
 
 
     }
-     pop_out := PopOut {
-       
-    }
+
 
 }

@@ -27,10 +27,13 @@ export component Sidebar inherits Rectangle {
         padding-top: 15px;
         padding-bottom: 30px;
         spacing: 10px;
-
+        padding-left: 30px;
+        padding-right: 30px;
         art := Rectangle {   
-            //width: 120px;
-            //height: 120px;
+            width: 120px;
+            height: 120px;
+            border-width: 1px;
+            border-color: #3f3f3f;
             cover := Image {
                 height: 120px;
                 width: 120px;
@@ -39,7 +42,6 @@ export component Sidebar inherits Rectangle {
         }
 
         title := Text {
-            //text: "currently playing";
             horizontal-alignment: center;
             font-size: 16px;
         }
@@ -49,8 +51,6 @@ export component Sidebar inherits Rectangle {
 
             HorizontalLayout {
                 alignment: space-around;
-                padding-left: 30px;
-                padding-right: 30px;
 
                 skip_back := MediaButton {
                     image-url: @image-url("img/skip.png");

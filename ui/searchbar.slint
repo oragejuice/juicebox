@@ -1,29 +1,80 @@
 
 import { LineEdit } from "std-widgets.slint";
 
+
+component ScreenButton inherits Rectangle {
+    in property <string> name <=> text.text;
+    callback clicked <=> touch.clicked;
+    pure callback is-selected() -> bool;
+
+    background: touch.has-hover ? #8b8b8b : (is-selected() ? #5b5b5b : #1b1b1b);
+    animate background {
+        duration: 100ms;
+    }
+    touch := TouchArea {
+        width: 100%;
+        text := Text {
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            font-size: 13px;
+        }
+    }
+    horizontal-stretch: 100%;
+    
+}
+
 export component SearchBar inherits Rectangle {
 
-
+    out property <int> current-item;
     callback accepted(string);
 
     padding-top: 3px;
-    height: 20px;
+    VerticalLayout {
+        Rectangle {
+            height: 20px;
+            HorizontalLayout {
+                home := ScreenButton {
+                    name: "home";
+                    clicked => {current-item = 0}
+                    is-selected => {current-item == 0}
+                }
+                search := ScreenButton {
+                    name: "search";
+                    clicked => {current-item = 1}
+                    is-selected => {current-item == 1}
 
-    Rectangle {
+                }
+                playlists := ScreenButton {
+                    name: "playlists";
+                    clicked => {current-item = 2}
+                    is-selected => {current-item == 3}
 
-        width: 90%;
-
-        HorizontalLayout {
-            alignment: center;
-            search_box := LineEdit {
-                font-size: 16px;
-                width: 100%;
-
-                accepted => {
-                    root.accepted(self.text);
+                }
+                settings := ScreenButton {
+                    name: "settings";
+                    clicked => {current-item = 3}
+                    is-selected => {current-item == 3}
+                }
+            }
+        }
+        Rectangle {
+            padding-top: 5px;
+            background: #2b2b2b;
+            //width: 90%;
+            height: 20px;
+            HorizontalLayout {
+                alignment: center;
+                search_box := LineEdit {
+                    font-size: 16px;
+                    width: 70%;
+    
+                    accepted => {
+                        root.accepted(self.text);
+                    }
                 }
             }
         }
     }
+
 
 }

@@ -23,7 +23,6 @@ pub async fn get_song_decoded(url: &str) -> Result<Box<rodio::Decoder<Cursor<Vec
     return Ok(Box::new(source));
 }
 
-
 pub async fn get_bytes_from_track_url(url: &str) -> Result<Box<rodio::Decoder<Cursor<Vec<u8>>>>> {
     println!("url: {}", url);
     let download_url = get_download_url(url.to_string()).await;
@@ -33,7 +32,7 @@ pub async fn get_bytes_from_track_url(url: &str) -> Result<Box<rodio::Decoder<Cu
 
 pub async fn get_bytes_from_track_info(info: SearchResultType) -> Result<(Box<rodio::Decoder<Cursor<Vec<u8>>>>, String, String)> {
     match info {
-        SearchResultType::Song { url, name, artist_name } => {
+        SearchResultType::Song { url, name, artist_name, image, image_path } => {
             let download_url = get_download_url(url.to_string()).await;
             Ok((get_song_decoded(download_url?.unwrap().as_str()).await?, name, artist_name))
         }
@@ -77,7 +76,7 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
 
     let reader = get_stream(download_url.unwrap().as_str()).await?;
 
-    let json = get_json_for_album(&song_url.clone()).await?;
+    let json = parse_for_album(html.as_str()).await?;
     let image = json["image"].as_str().unwrap();
     let artist = json["inAlbum"]["byArtist"]["name"].to_string();
     let album = json["inAlbum"]["name"].to_string();
@@ -92,8 +91,8 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
 
     let caching_time = std::time::SystemTime::now();
 
-    println!("html download {:?}, json parsing {:?}, caching image {:?}", html_time.duration_since(start_time),
-     parsing_time.duration_since(html_time), caching_time.duration_since(parsing_time));
+    println!("html download {:?}, json parsing {:?}, caching image {:?}",
+     html_time.duration_since(start_time),parsing_time.duration_since(html_time), caching_time.duration_since(parsing_time));
 
 
      Ok(TrackInfo{
@@ -106,7 +105,12 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
 }
 
 pub async fn get_album_info(album_url: &str) -> Result<(Vec<String>, String)> {
-    let json = get_json_for_album(album_url).await?;
+    let html = reqwest::get(album_url)
+        .await?
+        .text()
+        .await?;
+
+    let json = parse_for_album(&html).await?;
     let image = json["image"].to_string();
     let album_release = json["albumRelease"].to_string();
 
@@ -120,7 +124,7 @@ pub async fn get_album_info(album_url: &str) -> Result<(Vec<String>, String)> {
 
 }
 
-async fn fetch_url(url: String, file_name: String) -> Result<()> {
+pub async fn fetch_url(url: String, file_name: String) -> Result<()> {
     let response = reqwest::get(url).await?;
     let mut file = std::fs::File::create(file_name)?;
     let mut content =  Cursor::new(response.bytes().await?);
@@ -128,11 +132,94 @@ async fn fetch_url(url: String, file_name: String) -> Result<()> {
     Ok(())
 }
 
-fn sanitize_filename(name: String) -> String {
-    let re = Regex::new(r"[#.&%/\\*!$<>{}?]").unwrap();
-    re.replace_all(name.as_str(), "x").to_string()
+pub fn sanitize_filename(name: String) -> String {
+    let re = Regex::new(r"[#.&%/\\*!$<>{}?| ]").unwrap();
+    re.replace_all(name.as_str(), "_").to_string()
 }
 
+pub fn trim_whitespace(s: &str) -> String {
+    let mut new_str = s.trim().to_owned();
+    let mut prev = ' '; // The initial value doesn't really matter
+    new_str.retain(|ch| {
+        let result = ch != ' ' || prev != ' ';
+        prev = ch;
+        result
+    });
+    let re = Regex::new(r"(\\n|\\t)").unwrap();
+    re.replace_all(&new_str, " ").to_string()
+}
+
+pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
+    let search_url = "https://bandcamp.com/search?q=".to_string() + query;
+    let start_time = std::time::SystemTime::now();
+    let html = reqwest::get(search_url)
+        .await?
+        .text()
+        .await?
+        .to_string();
+    let html_download_time = std::time::SystemTime::now();
+
+    let item_search = item_type_search(&html);
+    let title_and_links = title_and_link_search(&html);
+    let subheads = subhead_search(&html);
+    let cover_art = cover_art_search(&html);
+
+    let (items,  titles_links,  subheads, images) 
+        = futures::join!(item_search, title_and_links, subheads, cover_art);
+
+    let async_regex_time = std::time::SystemTime::now();
+
+    let search_results = items.iter().zip(subheads.iter().zip(images.iter().zip(titles_links.iter())));
+
+    let zipping_time = std::time::SystemTime::now();
+
+    let mut ret: Vec<Option<SearchResultType>> = vec![];
+    for res in search_results {
+        let (item, (subhead,(image, (link, title)))) = res;
+        let file_path = format!("juicebox/cache/{}.jpg", sanitize_filename(title.clone().unwrap().to_string()));
+        ret.push(get_result_type(link, title, image, subhead, item, &Some(file_path)));
+    }
+
+    let image_futures = ret.iter().map(|search_result| {
+        match search_result {
+            Some(res) => {
+                match res {
+                    SearchResultType::Artist { url, name, image, image_path } => {
+                        Some(fetch_url(image.clone(), image_path.to_string()))
+                    },
+                    SearchResultType::Album { url, name, artist_name, image, image_path } => {
+                        Some(fetch_url(image.clone(), image_path.to_string()))
+                    },
+                    SearchResultType::Label { url, name, image, image_path } => {
+                        Some(fetch_url(image.clone(), image_path.to_string()))
+                    },
+                    SearchResultType::Song { url: _, name, artist_name, image, image_path } => {
+                        Some(fetch_url(image.clone(), image_path.to_string()))
+                    },
+                }
+            },
+            None => None,
+        }
+    })
+    .flatten()
+    .collect::<Vec<_>>();
+
+
+
+    futures::future::join_all(image_futures).await;
+
+    //let ret: Vec<Option<SearchResultType>> = search_results;
+
+    let result_type_time = std::time::SystemTime::now();
+    let html_delay = html_download_time.duration_since(start_time).unwrap();
+    let regex_delay = async_regex_time.duration_since(html_download_time).unwrap();
+    let zipping_delay = zipping_time.duration_since(async_regex_time).unwrap();
+    let result_delay = result_type_time.duration_since(zipping_time).unwrap();
+    println!("html {:?}, regex: {:?}, zipping: {:?}, result: {:?}", html_delay, regex_delay, zipping_delay, result_delay);
+
+    Ok(ret)
+}
+/*
 pub async fn search_for(search: &str) -> Result<Vec<SearchResultType>> {
     let search_url = "https://bandcamp.com/search?q=".to_string() + search;
 
@@ -144,22 +231,102 @@ pub async fn search_for(search: &str) -> Result<Vec<SearchResultType>> {
     let html_time = std::time::SystemTime::now();
 
     let link_regex = Regex::new(r">https:\/\/(.*?)\.bandcamp\.com(.*)<\/a>").unwrap();
-    let matches = link_regex.find_iter(&html).map(|s| s.as_str()).collect::<Vec<&str>>();
-    let results: Vec<SearchResultType> = matches.iter()
-    .map(|&s| s[1..s.len()-4].to_string() )
-    .map(|s|  get_result_type(s))
-    .collect();
+    let mut matches = link_regex.find_iter(&html).map(|s| s.as_str()).collect::<Vec<&str>>();
+    let regex_time = std::time::SystemTime::now();
+
+    let results: Vec<SearchResultType> = matches.par_iter_mut()
+        .map(|s| s[1..s.len()-4].to_string())
+        .map(|s| get_result_type(s))
+        .collect();
+
     let mapping_time = std::time::SystemTime::now();
+
     let loading = html_time.duration_since(start_time)?;
-    let regex_time = mapping_time.duration_since(html_time)?;
-    println!("html loading time {:?}, regex time: {:?}, for query {search}", loading, regex_time);
+    let doing_regex = regex_time.duration_since(html_time)?;
+    let mappings_time = mapping_time.duration_since(regex_time);
+    let total_time = mapping_time.duration_since(start_time);
+    println!("html loading time {:?}, regex time: {:?}, mapping time {:?}, total {:?} for query {search}", loading, doing_regex, mappings_time, total_time);
+
     Ok(results)
+}
+*/
+
+async fn item_type_search(html: &String) -> Vec<Option<String>> {
+    
+    let item_type_pattern = RegexBuilder::new(r#"<div class="itemtype">(.*?)</div>"#)
+        .dot_matches_new_line(true)
+        .build()
+        .unwrap();
+    let matches = item_type_pattern.captures_iter(&html)
+        .map(|capture| capture.get(1))
+        .map(|s| {
+            match s {
+                Some(m) => Some(m.as_str().trim().to_string()),
+                None => None 
+            }
+        }).collect::<Vec<Option<String>>>();
+    return matches;
+}
+
+async fn title_and_link_search(html: &String) -> Vec<(Option<String>, Option<String>)> {
+    
+    let item_type_pattern = RegexBuilder::new(r#"<div class="heading">(.*?)<a href="(.*?)">(.*?)</a>(.*?)</div>"#)
+        .dot_matches_new_line(true)
+        .build()
+        .unwrap();
+    let matches = item_type_pattern.captures_iter(&html)
+        .map(|capture| (capture.get(2), capture.get(3)))
+        .map(|s| {
+            let (_links, _titles) = s;
+            let links = match _links {
+                Some(m) => Some(m.as_str().trim().to_string()),
+                None => None 
+            };
+            let titles: Option<String> = match _titles {
+                Some(m) => Some(m.as_str().trim().to_string()),
+                None => None 
+            };
+            (links, titles)
+        }).collect::<Vec<(Option<String>, Option<String>)>>();
+    return matches;
+}
+
+async fn subhead_search(html: &String) -> Vec<Option<String>> {
+    
+    let item_type_pattern = RegexBuilder::new(r#"<div class="subhead">(.*?)</div>"#)
+        .dot_matches_new_line(true)
+        .build()
+        .unwrap();
+    let matches = item_type_pattern.captures_iter(&html)
+        .map(|capture| capture.get(1))
+        .map(|s| {
+            match s {
+                Some(m) => Some(trim_whitespace(m.as_str())),
+                None => None 
+            }
+        }).collect::<Vec<Option<String>>>();
+    return matches;
+}
+
+async fn cover_art_search(html: &String) -> Vec<Option<String>> {
+    
+    let item_type_pattern = RegexBuilder::new(r#"<div class="art">(.*?)<img src="(.*?)">(.*?)</div>"#)
+        .dot_matches_new_line(true)
+        .build()
+        .unwrap();
+    let matches = item_type_pattern.captures_iter(&html)
+        .map(|capture| capture.get(2))
+        .map(|s| {
+            match s {
+                Some(m) => Some(m.as_str().trim().to_string()),
+                None => None 
+            }
+        }).collect::<Vec<Option<String>>>();
+    return matches;
 }
 
 pub async fn get_stream(download_url: &str) -> Result<StreamDownload<TempStorageProvider>>{
     let stream = HttpStream::<Client>::create(download_url.parse()?,).await?;
-    println!("content length={:?}", stream.content_length());
-    println!("content type={:?}", stream.content_type());
 
     let reader: StreamDownload<TempStorageProvider> =
     StreamDownload::from_stream(stream, TempStorageProvider::new(), Settings::default())
@@ -168,11 +335,7 @@ pub async fn get_stream(download_url: &str) -> Result<StreamDownload<TempStorage
     Ok(reader)
 }
 
-pub async fn get_json_for_album(album_url: &str) -> Result<Value> {
-    let html = reqwest::get(album_url)
-    .await?
-    .text()
-    .await?;
+pub async fn parse_for_album(html: &str) -> Result<Value> {
 
     let json_regex: Regex  = RegexBuilder::new(r#"<script type="application/ld\+json">(.*?)</script>"#)
     .dot_matches_new_line(true)
@@ -197,25 +360,34 @@ pub struct TrackInfo {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum SearchResultType {
-    Artist{url: String, name: String},
-    Album{url: String, name: String, artist_name: String},
-    Song{url: String, name: String, artist_name: String}
+    Artist{url: String, name: String, image: String, image_path: String},
+    Album{url: String, name: String, artist_name: String, image: String, image_path: String},
+    Label{url: String, name: String, image: String, image_path: String},
+    Song{url: String, name: String, artist_name: String, image: String, image_path: String}
 }
 
-fn get_result_type(url: String) -> SearchResultType {
 
-    let name_regex = Regex::new(r"\/([^/]*?)$").unwrap();
-    let artist_regex = Regex::new(r"https:\/\/([^/]*?)\.").unwrap();
-    let artist = artist_regex.find(&url).expect("Failed to get artist name").as_str();
-    let artist_name = artist[8.. artist.len() - 1].to_string();
+fn get_result_type(
+    _url: &Option<String>,
+    _name: &Option<String>,
+    _image: &Option<String>, 
+    subheading: &Option<String>, 
+    item: &Option<String>,
+    _image_path: &Option<String>,
+    ) -> Option<SearchResultType> {
+    let i = (*item).clone()?;
+    let url = (*_url).clone()?;
+    let name = (*_name).clone()?;
+    let image = (*_image).clone()?;
+    let image_path = (*_image_path).clone()?;
 
-    if url.contains("/album/") {
-        let name: String = name_regex.find(&url).expect("Oh no...").as_str()[1..].to_string();
-        return SearchResultType::Album { url: url, name: name, artist_name: artist_name }
-    } else if url.contains("/track/") {
-        let name: String = name_regex.find(&url).expect("Oh no...").as_str()[1..].to_string();
-        return SearchResultType::Song { url: url, name: name, artist_name: artist_name };
-    } else {
-        return SearchResultType::Artist { url: url, name: artist_name };
-    }
+    let result = match i.as_str() {
+        "ARTIST" => Some(SearchResultType::Artist { url: url, name: name, image: image, image_path: image_path }),
+        "ALBUM" => Some(SearchResultType::Album { url: url, name: name, artist_name: (*subheading).clone()?, image: image, image_path: image_path }),
+        "TRACK" => Some(SearchResultType::Song { url: url, name: name, artist_name: (*subheading).clone()?, image: image, image_path: image_path }),
+        "LABEL" => Some(SearchResultType::Label { url: url, name: name, image: image,image_path: image_path }),
+        _ => None
+    };
+    return result;
+
 }

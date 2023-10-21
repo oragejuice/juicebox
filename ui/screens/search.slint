@@ -1,56 +1,98 @@
+
+import { ListView } from "std-widgets.slint";
 struct SearchData {
     name: string,
     artist: string,
     url: string,
+    image: image,
     result_type: int
 }
 
+
+
 export component SearchResult inherits Rectangle {
-    height: 20px;
+    height: 60px;
     //width: 100%;
 
     in property <string> name <=> name.text;
     in property <string> artist <=> artist.text;
     in property <string> url;
     in property <int> result_type; // song = 0, album = 1, artist = 2
+    in property <image> image <=> img.source;
 
-    HorizontalLayout {
-        alignment: start;
-        name := Text {
-            width: 200px;
+    Rectangle {
+        height: 60px;
+        padding: 5px;
+        TouchArea {
+            clicked => {SearchScreen.play-track(root.name, root.url, root.result-type)}
+            HorizontalLayout {
+                padding-left: 5px;
+                Rectangle {
+                    width: 50px;
+                    img := Image {
+                        width: 50px;
+                        height: 50px;
+                    }
+                }
+                Rectangle {
+                    width: 100%;
+                    padding: 10px;
+                    VerticalLayout {
+                        alignment: start;
+                        padding-top: 5px;
+                        padding-left: 10px;
+                        spacing: 2px;
+                        name := Text {
+                            font-size: 14px;
+                        }
+                        artist := Text {
+                            font-size: 10px;
+                        }
+                        type := Text {
+                            text: display-result-type(result-type);
+                        }
+                    }
+                }
+
+            }
         }
-        artist := Text {}
     }
 
-    if result-type == 0 : TouchArea {
-        clicked => {SearchScreen.play-track(root.name, root.url, root.result-type)}
+    public pure function display_result_type(value: int) -> string {
+        value == 0 ? "Track" : ( value == 1 ? "Album" : "Artist")
     }
-    
+
 }
 
 export component Search inherits Rectangle {
     background: #2b2b2b;
     min-width: 460px;
-    min-height: 460px;
+    //min-height: 460px;
 
     in-out property <[SearchData]> results <=> SearchScreen.search_results;
 
     VerticalLayout {
         alignment: start;
-
-        for result[i] in results : SearchResult {
-            name: result.name;
-            artist: result.artist;
-            url: result.url;
-            result-type: result.result-type;
+        padding-left: 5px;
+        spacing: 2px;
+        Rectangle {
+            height: 15px;
         }
+        ListView {
+            height: 100%;
+
+            for result[i] in results : SearchResult {
+                name: result.name;
+                artist: result.artist;
+                url: result.url;
+                result-type: result.result-type;
+                image: result.image;
+            }
+        }
+
     }
 
 }
-
-
-
-
 
 
 

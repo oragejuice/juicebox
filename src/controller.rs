@@ -1,5 +1,5 @@
 
-use std::io::{Cursor, Error};
+use std::io:: Error;
 
 use rodio::{Decoder, Sink};
 use stream_download::{StreamDownload, storage::temp::TempStorageProvider};
