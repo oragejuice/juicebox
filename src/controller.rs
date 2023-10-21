@@ -1,7 +1,8 @@
 
-use std::io::Cursor;
+use std::io::{Cursor, Error};
 
 use rodio::{Decoder, Sink};
+use stream_download::{StreamDownload, storage::temp::TempStorageProvider};
 
 pub struct Controller {
     is_paused: bool,
@@ -32,10 +33,22 @@ impl Controller {
         self.is_paused = false;
     }
 
-    pub fn play_file(&mut self, source: Decoder<Cursor<Vec<u8>>>) {
+    pub fn play_stream(&mut self, source: Decoder<StreamDownload<TempStorageProvider>>) {
         self.sink.clear();
         let _ = &self.sink.append(source);
         self.play();
+    }
+
+    pub fn handle_control_inst(&mut self, instruction: MediaControlIns) -> Result<MediaControlIns, Error> {
+        match instruction {
+            MediaControlIns::Play => {let _ = self.play();},
+            MediaControlIns::Pause =>{let _ = self.pause();},
+            MediaControlIns::TogglePausePlay => {let _ = self.toggle_pause_play();},
+            MediaControlIns::Skip => todo!(),
+            MediaControlIns::Back => todo!(),
+        }
+
+        Ok(instruction)
     }
 }
 
@@ -47,4 +60,12 @@ pub fn new(sink: Sink) -> Controller{
         sink: sink,
         queue: Vec::new()
     }
+}
+
+pub enum MediaControlIns {
+    Play,
+    Pause,
+    TogglePausePlay,
+    Skip,
+    Back,
 }

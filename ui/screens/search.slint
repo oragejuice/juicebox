@@ -1,0 +1,61 @@
+struct SearchData {
+    name: string,
+    artist: string,
+    url: string,
+    result_type: int
+}
+
+export component SearchResult inherits Rectangle {
+    height: 20px;
+    //width: 100%;
+
+    in property <string> name <=> name.text;
+    in property <string> artist <=> artist.text;
+    in property <string> url;
+    in property <int> result_type; // song = 0, album = 1, artist = 2
+
+    HorizontalLayout {
+        alignment: start;
+        name := Text {
+            width: 200px;
+        }
+        artist := Text {}
+    }
+
+    if result-type == 0 : TouchArea {
+        clicked => {SearchScreen.play-track(root.name, root.url, root.result-type)}
+    }
+    
+}
+
+export component Search inherits Rectangle {
+    background: #2b2b2b;
+    min-width: 460px;
+    min-height: 460px;
+
+    in-out property <[SearchData]> results <=> SearchScreen.search_results;
+
+    VerticalLayout {
+        alignment: start;
+
+        for result[i] in results : SearchResult {
+            name: result.name;
+            artist: result.artist;
+            url: result.url;
+            result-type: result.result-type;
+        }
+    }
+
+}
+
+
+
+
+
+
+
+export global SearchScreen {
+    in property <[SearchData]> search_results;
+    callback play_track(string, string, int); //name, artist, result-type ([0,1,2] => [song, album, artist])
+}
+

@@ -1,19 +1,22 @@
 
 mod controller;
 mod scraper;
+mod storage;
 
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc, path::Path};
 
+use controller::MediaControlIns;
+use slint::{Model, ModelRc, VecModel, Image};
 use tokio::sync::{mpsc, Mutex};
-use rodio::{OutputStream, Sink};
+use rodio::{OutputStream, Sink, DeviceTrait};
 
 slint::include_modules!();
 
 
 macro_rules! juiceloop {
-    ($message:ident, $result:ident, $future:expr, $logic:block) => {
+    ($type:ty, $message:ident, $result:ident, $future:expr, $logic:block) => {
         {
-            let (tx, mut rx) = mpsc::unbounded_channel::<Option<String>>();
+            let (tx, mut rx) = mpsc::unbounded_channel::<$type>();
 
             tokio::spawn( async move {
 
@@ -25,7 +28,9 @@ macro_rules! juiceloop {
                             Some($message) => $future.await,
                             None => futures::future::pending().await
                         }
-                    } => $logic,
+                    } => {
+                        $logic
+                    },
 
                     r = rx.recv() => match r {
                         Some(nv) => {
@@ -47,46 +52,106 @@ macro_rules! juiceloop {
 #[tokio::main]
 async fn main() -> Result<(), slint::PlatformError>{
 
+
+    //let v = scraper::get_json_for_album("https://machinegirl.bandcamp.com/album/reporpoised-phantasies").await?;
+    // println!("img link: {}", v["image"]);
+    // println!("tracks: {}", v["albumRelease"]);
+
+    let r = storage::create_folder().await;
+    println!("{:?}", r);
+
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let sink = Sink::try_new(&stream_handle).unwrap();
-    let mut controller: controller::Controller = controller::new(sink);
-
+    let mut _controller: controller::Controller = controller::new(sink);
+    let controller: Arc<Mutex<controller::Controller>> = Arc::new(Mutex::new(_controller));
 
     let gui = App::new().unwrap();
-    let gui_weak = gui.as_weak();
 
+
+
+    let playback_gui_weak  = gui.as_weak();
+    let playback_controller = controller.clone();
     let playback_loop: mpsc::UnboundedSender<Option<String>> = juiceloop!(
-        download_url,
+        Option<String>,
+        song_url,
         results,
-        scraper::get_song_decoded(download_url.as_str()),
+        scraper::get_track_info(song_url),
         {
             match results {
-                Ok(file) => {
-                    controller.play_file(*file);
-                    let gui_copy = gui_weak.clone();
+                Ok(info) => {
+                    println!("playing song!");
+                    playback_controller.lock().await.play_stream(info.file);      
+                    let gui_copy = playback_gui_weak.clone();
+
                     let _ = slint::invoke_from_event_loop(move || {
-                        let gui = gui_copy.unwrap();
-                        let _ = gui.set_name("currently playing".into());
-                    });
+                        gui_copy.unwrap().set_song_title(info.name.into());
+                        let img_result = Image::load_from_path(Path::new(info.image.as_str()));
+                        match img_result {
+                            Ok(img) => gui_copy.unwrap().set_cover_art(img),
+                            Err(e) => println!("{:?}",e)
+                        }
+                        
+                    });             
                 }
-                Err(_) => ()
+                Err(e) => println!("error on loading track {:?}", e)
             }
         }
     );
 
+    let gui_search_weak = gui.as_weak();
     let search_loop: mpsc::UnboundedSender<Option<String>> = juiceloop!(
+        Option<String>,
         query,
         results,
         scraper::search_for(query.as_str()),
         { 
             match results {
-                Ok(res) => {
+                Ok(res) => {                    
+                    let gui_copy = gui_search_weak.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let gui = gui_copy.unwrap();
+                                                let widgets_data: Vec<SearchData> = res.iter()
+                        .map(|r| {
+                            match r {
+                                scraper::SearchResultType::Artist { url, name } =>
+                                     SearchData { artist: name.into(), name: "".into(), url: url.into(), result_type: 2 },
+                                scraper::SearchResultType::Album { url, name, artist_name } =>
+                                     SearchData { artist: artist_name.into(), name: name.into(), url: url.into(), result_type: 1 },
+                                scraper::SearchResultType::Song { url, name, artist_name } =>
+                                     SearchData { artist: artist_name.into(), name: name.into(), url: url.into(), result_type: 0 },
+                            }
+                        }).collect();
+                        let widgets_rc = ModelRc::from(Rc::new(VecModel::from(widgets_data)).clone());
+                        gui.global::<SearchScreen>().set_search_results(widgets_rc);
 
-
-                    println!("results.. \n {:?}", res);
+                    });
                 },
                 Err(_) => ()
             }
+        }
+    );
+
+    let control_controller = controller.clone();
+    let media_control_loop: mpsc::UnboundedSender<Option<MediaControlIns>> = juiceloop!(
+        Option<MediaControlIns>,
+        ins,
+        results,
+        async move {ins},
+        {
+            match results {
+                MediaControlIns::Play => {
+                    control_controller.lock().await.play();
+                },
+                MediaControlIns::Pause => {
+                    control_controller.lock().await.pause();
+                },
+                MediaControlIns::TogglePausePlay => {
+                    control_controller.lock().await.toggle_pause_play();
+                },
+                MediaControlIns::Skip => todo!(),
+                MediaControlIns::Back => todo!(),
+            }
+
         }
     );
 
@@ -94,18 +159,25 @@ async fn main() -> Result<(), slint::PlatformError>{
 
     gui.on_play_pause({
         move || {
-            let url = "https://t4.bcbits.com/stream/e997186749c3dc5cea496ff7b4405695/mp3-128/2261903040?p=0&ts=1697813995&t=6fd3039d1af75cced2f5836d77627b68c10b3e52&token=1697813995_6ef94c7ad323a96a233befdeda405e2a19d0ba97".to_string();
-            let _ = playback_loop.send(Some(url));
+            let _ = media_control_loop.send(Some(MediaControlIns::TogglePausePlay));
         }
     });
 
     gui.on_searched({
         move |query| {
-            println!{"searched for: {}", query}
             let _ = search_loop.send(Some(query.to_string()));
 
         }
     });
+
+    gui.global::<SearchScreen>().on_play_track({
+        move |name, url, result_type| {
+            if result_type == 0 {
+                let _ = playback_loop.send(Some(url.into()));
+            }
+        }
+    });
+
 
     
     gui.run()

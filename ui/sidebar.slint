@@ -18,6 +18,9 @@ export component Sidebar inherits Rectangle {
     callback play_pause <=> play.clicked;
     callback skip_forward <=> skip_forward.clicked;
 
+    in-out property <string> song-title <=> title.text;
+    in-out property <image> cover_art <=> cover.source;
+
 
     VerticalLayout {
         alignment: start;
@@ -28,15 +31,15 @@ export component Sidebar inherits Rectangle {
         art := Rectangle {   
             //width: 120px;
             //height: 120px;
-            Image {
+            cover := Image {
                 height: 120px;
                 width: 120px;
-                source: @image-url("img/cover_art.jpg");
+                source: @image-url("");
             }
         }
 
         title := Text {
-            text: "currently playing";
+            //text: "currently playing";
             horizontal-alignment: center;
             font-size: 16px;
         }
@@ -63,3 +66,75 @@ export component Sidebar inherits Rectangle {
         }
     }
 }
+
+component PopOutItem inherits Rectangle {
+
+    in property <image> image-source <=> img.source;
+    in property <bool> popping;
+    callback clicked <=> touch.clicked;
+
+    img := Image {
+        width: popping ? 10px : 30px;
+        animate width {
+            duration: 50ms;
+        }
+    }
+
+    touch := TouchArea {
+
+    }
+    
+}
+
+export component PopOut inherits Rectangle {
+    width: !touch.has-hover ? 15px : 60px;
+    x: 0px;
+    animate width {
+         duration: 50ms;
+    }
+    background: #000;
+
+    in-out property<int> current_item;
+
+    
+
+    touch := TouchArea {
+
+        VerticalLayout {
+            alignment: start;
+            spacing: !touch.has-hover ? 1px : 5px;
+            padding-top: 5px;
+            animate spacing {
+                 duration: 50ms;
+            }
+    
+    
+            home := PopOutItem {
+                image-source: @image-url("img/home.png");
+                popping: !touch.has-hover;
+                clicked => {root.current-item = 0;}
+            }
+    
+            search := PopOutItem {
+                image-source: @image-url("img/search.png");
+                popping: !touch.has-hover;
+                clicked => {root.current-item = 1;}
+            }
+
+            playlists := PopOutItem {
+                image-source: @image-url("img/playlist.png");
+                popping: !touch.has-hover;
+                clicked => {root.current-item = 2;}
+            }
+
+            settings := PopOutItem {
+                image-source: @image-url("img/settings.png");
+                popping: !touch.has-hover;
+                clicked => {root.current-item = 3;}
+            }
+        }
+     }
+    
+}
+
+

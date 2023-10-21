@@ -1,6 +1,10 @@
 
-import {Sidebar} from "sidebar.slint";
+import {Sidebar, PopOut} from "sidebar.slint";
 import {SearchBar} from "searchbar.slint";
+import {Home, Search, Playlists, Settings, SearchScreen} from "screens/screens.slint";
+import { TabWidget } from "std-widgets.slint";
+
+export { SearchScreen }
 
 export component App inherits Window {
     preferred-width: 640px;
@@ -13,23 +17,33 @@ export component App inherits Window {
     callback searched <=> search_bar.accepted;
 
     in property <string> name;
+    in-out property <string> song-title <=> sidebar.song-title;
+    in-out property <image> cover_art <=> sidebar.cover_art;
     title <=> name;
 
 
+
     HorizontalLayout {
+
+
+
         sidebar := Sidebar {
-            
         }
+
         VerticalLayout {
-            search_bar := SearchBar {
 
-            }
-            main_screen := Rectangle {
-                background: #2b2b2b;
-                min-width: 460px;
-            }
+            search_bar := SearchBar {}
+            
+            if(pop_out.current_item == 0) : Home{}
+            if(pop_out.current_item == 1) : Search {}
+            if(pop_out.current_item == 2) : Playlists {}
+            if(pop_out.current_item == 3) : Settings {}
         }
 
+
+    }
+     pop_out := PopOut {
+       
     }
 
 }
