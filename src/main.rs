@@ -2,11 +2,11 @@
 mod controller;
 mod scraper;
 mod storage;
+mod stopwatch;
 
-use std::{rc::Rc, sync::Arc, path::Path};
+use std::{rc::Rc, sync::Arc, path::Path, time::Duration};
 
 use controller::MediaControlIns;
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use slint::{ModelRc, VecModel, Image};
 use tokio::sync::{mpsc, Mutex};
 use rodio::{OutputStream, Sink};
@@ -53,13 +53,7 @@ macro_rules! juiceloop {
 #[tokio::main]
 async fn main() -> Result<(), slint::PlatformError>{
 
-
-    //let v = scraper::get_json_for_album("https://machinegirl.bandcamp.com/album/reporpoised-phantasies").await?;
-    // println!("img link: {}", v["image"]);
-    // println!("tracks: {}", v["albumRelease"]);
-
-    let r = storage::create_folder().await;
-    println!("{:?}", r);
+    let _ = storage::create_folder().await;
 
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let sink = Sink::try_new(&stream_handle).unwrap();
@@ -69,8 +63,7 @@ async fn main() -> Result<(), slint::PlatformError>{
 
     let gui = App::new().unwrap();
 
-
-
+    
     let playback_gui_weak  = gui.as_weak();
     let playback_controller = controller.clone();
     let playback_loop: mpsc::UnboundedSender<Option<String>> = juiceloop!(
@@ -84,7 +77,6 @@ async fn main() -> Result<(), slint::PlatformError>{
                     println!("playing song!");
                     playback_controller.lock().await.play_stream(info.file);      
                     let gui_copy = playback_gui_weak.clone();
-
                     let _ = slint::invoke_from_event_loop(move || {
                         gui_copy.unwrap().set_song_title(info.name.into());
                         let img_result = Image::load_from_path(Path::new(info.image.as_str()));
@@ -117,7 +109,6 @@ async fn main() -> Result<(), slint::PlatformError>{
                             .map(|r| {
                                 match r {
                                     scraper::SearchResultType::Artist {url,name,image, image_path } => {
-                                        println!("{}", image_path);
                                         let img_result = Image::load_from_path(Path::new(image_path.as_str()));
                                         SearchData { artist: name.into(), name: "".into(), url: url.into(), result_type: 2, image: img_result.unwrap() }
                                     },
@@ -145,22 +136,36 @@ async fn main() -> Result<(), slint::PlatformError>{
         }
     );
 
+    let gui_controls_weak = gui.as_weak();
     let control_controller = controller.clone();
     let media_control_loop: mpsc::UnboundedSender<Option<MediaControlIns>> = juiceloop!(
         Option<MediaControlIns>,
         ins,
         results,
         async move {ins},
-        {
+        { 
+            let gui_copy = gui_controls_weak.clone();
             match results {
                 MediaControlIns::Play => {
                     control_controller.lock().await.play();
+                    let _ =slint::invoke_from_event_loop(move || {
+                        let gui = gui_copy.unwrap();
+                        gui.set_is_paused(false);
+                    });
                 },
                 MediaControlIns::Pause => {
                     control_controller.lock().await.pause();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let gui = gui_copy.unwrap();
+                        gui.set_is_paused(true);
+                    });
                 },
                 MediaControlIns::TogglePausePlay => {
-                    control_controller.lock().await.toggle_pause_play();
+                    let val = control_controller.lock().await.toggle_pause_play();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let gui = gui_copy.unwrap();
+                        gui.set_is_paused(val);
+                    });
                 },
                 MediaControlIns::Skip => todo!(),
                 MediaControlIns::Back => todo!(),
@@ -168,8 +173,6 @@ async fn main() -> Result<(), slint::PlatformError>{
 
         }
     );
-
-
 
     gui.on_play_pause({
         move || {
@@ -185,7 +188,7 @@ async fn main() -> Result<(), slint::PlatformError>{
     });
 
     gui.global::<SearchScreen>().on_play_track({
-        move |name, url, result_type| {
+        move |_, url, result_type| {
             if result_type == 0 {
                 let _ = playback_loop.send(Some(url.into()));
             }

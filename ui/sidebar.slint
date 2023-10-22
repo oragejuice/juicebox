@@ -1,3 +1,5 @@
+import { ProgressIndicator } from "std-widgets.slint";
+
 component MediaButton inherits TouchArea {
 
     in property <image> image-url;
@@ -20,6 +22,8 @@ export component Sidebar inherits Rectangle {
 
     in-out property <string> song-title <=> title.text;
     in-out property <image> cover_art <=> cover.source;
+    in property <bool> is-paused;
+    in property <string> time;
 
 
     VerticalLayout {
@@ -52,89 +56,28 @@ export component Sidebar inherits Rectangle {
             HorizontalLayout {
                 alignment: space-around;
 
-                skip_back := MediaButton {
-                    image-url: @image-url("img/skip.png");
+                skip_forward := MediaButton {
+                    image-url: @image-url("img/skip_back.png");
                 }
                 play := MediaButton {
-                    image-url: @image-url("img/play.png");
+                    image-url: is-paused ? @image-url("img/play.png") : @image-url("img/pause.png");
                 }
-                skip_forward := MediaButton {
-                    image-url: @image-url("img/skip.png");
+                skip_back := MediaButton {
+                    image-url: @image-url("img/skip_forward.png");
                 }
+            }
 
+            progress := ProgressIndicator {
+                width: 100%;
+                height: 5px;
             }
         }
     }
 }
 
-component PopOutItem inherits Rectangle {
-
-    in property <image> image-source <=> img.source;
-    in property <bool> popping;
-    callback clicked <=> touch.clicked;
-
-    img := Image {
-        width: popping ? 10px : 30px;
-        animate width {
-            duration: 50ms;
-        }
-    }
-
-    touch := TouchArea {
-
-    }
-    
+export global SideBarInfo {
+    in property <percent> progress_bar;
 }
 
-export component PopOut inherits Rectangle {
-    width: !touch.has-hover ? 15px : 60px;
-    x: 0px;
-    animate width {
-         duration: 50ms;
-    }
-    background: #000;
-
-    in-out property<int> current_item;
-
-    
-
-    touch := TouchArea {
-
-        VerticalLayout {
-            alignment: start;
-            spacing: !touch.has-hover ? 1px : 5px;
-            padding-top: 5px;
-            animate spacing {
-                 duration: 50ms;
-            }
-    
-    
-            home := PopOutItem {
-                image-source: @image-url("img/home.png");
-                popping: !touch.has-hover;
-                clicked => {root.current-item = 0;}
-            }
-    
-            search := PopOutItem {
-                image-source: @image-url("img/search.png");
-                popping: !touch.has-hover;
-                clicked => {root.current-item = 1;}
-            }
-
-            playlists := PopOutItem {
-                image-source: @image-url("img/playlist.png");
-                popping: !touch.has-hover;
-                clicked => {root.current-item = 2;}
-            }
-
-            settings := PopOutItem {
-                image-source: @image-url("img/settings.png");
-                popping: !touch.has-hover;
-                clicked => {root.current-item = 3;}
-            }
-        }
-     }
-    
-}
 
 

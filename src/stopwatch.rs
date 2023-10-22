@@ -1,6 +1,8 @@
+use std::time::{Duration, SystemTime};
 
 
-struct StopWatch {
+
+pub struct StopWatch {
     elapsed_time: Duration,
     last_measured: SystemTime,
     paused: bool
@@ -8,25 +10,25 @@ struct StopWatch {
 
 impl StopWatch {
 
-    pub fn new() -> Timer {
-        Timer {
+    pub fn new() -> StopWatch {
+        StopWatch {
             elapsed_time: Duration::new(0,0),
-            last_measured: std::time::SystemTime::now(),
+            last_measured: SystemTime::now(),
             paused: false
         }
     }
 
     pub fn start(&mut self) {
         self.paused = false;
-        self.last_measured = std::time::SystemTime::now();
+        self.last_measured = SystemTime::now();
     }
 
     pub fn get_total_elapsed(&mut self) -> Duration {
         if self.paused {
             return self.elapsed_time;
         } else {
-            let ret = self.elapsed_time + last_measured.elapsed_time();
-            self.last_measured = std::time::SystemTime::now();
+            let ret = self.elapsed_time + self.last_measured.elapsed().unwrap();
+            self.last_measured = SystemTime::now();
             return ret;
         }
     }

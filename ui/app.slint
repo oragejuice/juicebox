@@ -1,10 +1,10 @@
 
-import {Sidebar, PopOut} from "sidebar.slint";
+import {Sidebar, SideBarInfo} from "sidebar.slint";
 import {SearchBar} from "searchbar.slint";
 import {Home, Search, Playlists, Settings, SearchScreen} from "screens/screens.slint";
 import { TabWidget } from "std-widgets.slint";
 
-export { SearchScreen }
+export { SearchScreen, SideBarInfo }
 
 export component App inherits Window {
     preferred-width: 640px;
@@ -19,7 +19,9 @@ export component App inherits Window {
     in property <string> name;
     in-out property <string> song-title <=> sidebar.song-title;
     in-out property <image> cover_art <=> sidebar.cover_art;
+    in property <bool> is-paused <=> sidebar.is-paused;
     title <=> name;
+    in property <string> song-time <=> sidebar.time;
 
 
 

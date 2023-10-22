@@ -1,13 +1,16 @@
 
-use std::io:: Error;
-
-use rodio::{Decoder, Sink};
+use std::io::Error;
+use rodio::{Decoder, Sink, Source};
 use stream_download::{StreamDownload, storage::temp::TempStorageProvider};
+
+use crate::{stopwatch::{StopWatch, self}, scraper::TrackInfo};
+
 
 pub struct Controller {
     is_paused: bool,
     pub sink: Sink,
-    queue: Vec<String>
+    pub stopwatch: StopWatch,
+    pub track_data: Option<TrackInfo>
 }
 
 impl Controller {
@@ -24,17 +27,24 @@ impl Controller {
     }
 
     pub fn pause(&mut self) {
-        &self.sink.pause();
+        let _ = &self.sink.pause();
         self.is_paused = true;
+        self.stopwatch.pause();
     }
 
     pub fn play(&mut self) {
-        &self.sink.play();
+        let _ = &self.sink.play();
         self.is_paused = false;
+        self.stopwatch.start();
+    }
+
+    pub fn is_paused(&self) -> bool {
+        return self.is_paused
     }
 
     pub fn play_stream(&mut self, source: Decoder<StreamDownload<TempStorageProvider>>) {
         self.sink.clear();
+        println!("song length is: {:?}", source.total_duration());
         let _ = &self.sink.append(source);
         self.play();
     }
@@ -58,8 +68,9 @@ pub fn new(sink: Sink) -> Controller{
     Controller {
         is_paused: true,
         sink: sink,
-        queue: Vec::new()
-    }
+        stopwatch: StopWatch::new(),
+        track_data: None
+}
 }
 
 pub enum MediaControlIns {

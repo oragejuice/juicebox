@@ -9,7 +9,6 @@ struct SearchData {
 }
 
 
-
 export component SearchResult inherits Rectangle {
     height: 60px;
     //width: 100%;
@@ -20,13 +19,13 @@ export component SearchResult inherits Rectangle {
     in property <int> result_type; // song = 0, album = 1, artist = 2
     in property <image> image <=> img.source;
 
-    Rectangle {
+    inner := Rectangle {
         height: 60px;
         padding: 5px;
         TouchArea {
             clicked => {SearchScreen.play-track(root.name, root.url, root.result-type)}
             HorizontalLayout {
-                padding-left: 5px;
+                //padding-left: 5px;
                 Rectangle {
                     width: 50px;
                     img := Image {
@@ -67,7 +66,6 @@ export component SearchResult inherits Rectangle {
 export component Search inherits Rectangle {
     background: #2b2b2b;
     min-width: 460px;
-    //min-height: 460px;
 
     in-out property <[SearchData]> results <=> SearchScreen.search_results;
 
@@ -78,6 +76,7 @@ export component Search inherits Rectangle {
         Rectangle {
             height: 15px;
         }
+
         ListView {
             height: 100%;
 
@@ -88,6 +87,7 @@ export component Search inherits Rectangle {
                 result-type: result.result-type;
                 image: result.image;
             }
+
         }
 
     }

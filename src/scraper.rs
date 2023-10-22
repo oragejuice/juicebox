@@ -7,43 +7,12 @@ use std::io::Cursor;
 
 use serde::{Serialize, Deserialize};
 
+use crate::storage::{retrieve_image, self};
+
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 
-pub async fn get_song_decoded(url: &str) -> Result<Box<rodio::Decoder<Cursor<Vec<u8>>>>> {
-    let bytes = reqwest::get(url.to_string())
-            .await?
-            .bytes()
-            .await?
-            .to_vec();
 
-    let cursor = Cursor::new(bytes);
-    let source = rodio::Decoder::new(cursor)?;
-
-    return Ok(Box::new(source));
-}
-
-pub async fn get_bytes_from_track_url(url: &str) -> Result<Box<rodio::Decoder<Cursor<Vec<u8>>>>> {
-    println!("url: {}", url);
-    let download_url = get_download_url(url.to_string()).await;
-    println!("download url: {:?}", download_url);
-    return get_song_decoded(download_url?.unwrap().as_str()).await;
-}
-
-pub async fn get_bytes_from_track_info(info: SearchResultType) -> Result<(Box<rodio::Decoder<Cursor<Vec<u8>>>>, String, String)> {
-    match info {
-        SearchResultType::Song { url, name, artist_name, image, image_path } => {
-            let download_url = get_download_url(url.to_string()).await;
-            Ok((get_song_decoded(download_url?.unwrap().as_str()).await?, name, artist_name))
-        }
-        _ => {
-            println!("not a song buddy!");
-            Err("AHHHH".into())
-        },
-
-    }
-    
-}
 
 pub async fn get_download_url(song_url: String) -> Result<Option<String>> {
     let html = reqwest::get(song_url)
@@ -84,10 +53,13 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
     let name = _name[1.._name.len()-1].to_string();
     let image_path = format!("juicebox/cache/{}.jpg", sanitize_filename(str::replace(name.as_str(), " ", "_")));
 
+    let song_length = ISO8601DateInterval_to_seconds(json["duration"].as_str().unwrap()).unwrap();
+
     let parsing_time = std::time::SystemTime::now();
 
     println!("image url: {}, image path {}, name {}", image, image_path, name.as_str());
-    fetch_url(image.to_string(), image_path.clone()).await?;
+    //fetch_url(image.to_string(), image_path.clone()).await?;
+    let image_path = retrieve_image(image, name.as_str()).await?;
 
     let caching_time = std::time::SystemTime::now();
 
@@ -100,7 +72,8 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
         name: name,
         album: album,
         artist: artist,
-        image: image_path
+        image: image_path,
+        track_length: song_length
      })       
 }
 
@@ -135,6 +108,17 @@ pub async fn fetch_url(url: String, file_name: String) -> Result<()> {
 pub fn sanitize_filename(name: String) -> String {
     let re = Regex::new(r"[#.&%/\\*!$<>{}?| ]").unwrap();
     re.replace_all(name.as_str(), "_").to_string()
+}
+
+fn ISO8601DateInterval_to_seconds(value: &str) -> Option<i32> {
+    let parser_regex = Regex::new(r#"P([0-9][0-9])H([0-9][0-9])M([0-9][0-9])S"#).unwrap();
+    let capture = parser_regex.captures(value)?;
+    let hours = str::parse::<i32>(capture.get(1)?.as_str()).unwrap();
+    let min =  str::parse::<i32>(capture.get(2)?.as_str()).unwrap();
+    let seconds = str::parse::<i32>(capture.get(3)?.as_str()).unwrap();
+
+    let total = hours * 3600 + min * 60 + seconds;
+    Some(total)
 }
 
 pub fn trim_whitespace(s: &str) -> String {
@@ -185,16 +169,16 @@ pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
             Some(res) => {
                 match res {
                     SearchResultType::Artist { url, name, image, image_path } => {
-                        Some(fetch_url(image.clone(), image_path.to_string()))
+                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
                     },
                     SearchResultType::Album { url, name, artist_name, image, image_path } => {
-                        Some(fetch_url(image.clone(), image_path.to_string()))
+                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
                     },
                     SearchResultType::Label { url, name, image, image_path } => {
-                        Some(fetch_url(image.clone(), image_path.to_string()))
+                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
                     },
                     SearchResultType::Song { url: _, name, artist_name, image, image_path } => {
-                        Some(fetch_url(image.clone(), image_path.to_string()))
+                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
                     },
                 }
             },
@@ -204,11 +188,8 @@ pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
     .flatten()
     .collect::<Vec<_>>();
 
-
-
     futures::future::join_all(image_futures).await;
 
-    //let ret: Vec<Option<SearchResultType>> = search_results;
 
     let result_type_time = std::time::SystemTime::now();
     let html_delay = html_download_time.duration_since(start_time).unwrap();
@@ -354,7 +335,8 @@ pub struct TrackInfo {
     pub name: String,
     pub album: String,
     pub artist: String,
-    pub image: String
+    pub image: String,
+    pub track_length: i32
 }
 
 
