@@ -75,7 +75,15 @@ async fn main() -> Result<(), slint::PlatformError> {
             match results {
                 Ok(info) => {
                     println!("playing song!");
-                    playback_controller.lock().await.play_stream(info.file);      
+                    playback_controller.lock().await.play_stream(info.file);
+                    playback_controller.lock().await.stopwatch.reset();
+                    let playing_data = controller::Playing {
+                        name: info.name.clone(),
+                        artist: info.artist.clone(),
+                        total_length: Duration::from_secs(info.track_length.try_into().unwrap()),
+                    };   
+                    playback_controller.lock().await.track_data = Some(playing_data);   
+
                     let gui_copy = playback_gui_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         gui_copy.unwrap().set_song_title(info.name.into());
@@ -128,6 +136,8 @@ async fn main() -> Result<(), slint::PlatformError> {
                             }).collect();
                         let widgets_rc = ModelRc::from(Rc::new(VecModel::from(widgets_data)).clone());
                         gui.global::<SearchScreen>().set_search_results(widgets_rc);
+                        gui.global::<SearchScreen>().set_is_loading(false);
+                        println!("loading finished");
 
                     });
                 },
@@ -180,8 +190,12 @@ async fn main() -> Result<(), slint::PlatformError> {
         }
     });
 
+    let gui_search_callback_weak = gui.as_weak();
     gui.on_searched({
         move |query| {
+            let gui = gui_search_callback_weak.clone().unwrap();
+            gui.global::<SearchScreen>().set_is_loading(true);
+            println!("loading started");
             let _ = search_loop.send(Some(query.to_string()));
 
         }
@@ -190,13 +204,32 @@ async fn main() -> Result<(), slint::PlatformError> {
     let gui_loop_weak = gui.as_weak();
     let loop_controller = controller.clone();
     tokio::spawn(async move {
+        let gui_copy = gui_loop_weak.clone();
         loop {
-            let gui_copy = gui_loop_weak.clone();
-            let a = &loop_controller.lock().await.track_data;
-            if a.is_some() {
-                println!("track length {:?}", a.as_ref().unwrap().track_length);
+            match loop_controller.try_lock() {
+                Ok(mut con) => {
+                    let elapsed = con.stopwatch.get_total_elapsed().clone();
+                    match &mut con.track_data {
+                        Some(td) => {
+                            let progress = elapsed.as_secs_f32() / td.total_length.as_secs_f32();
+                            let gui = gui_copy.clone();
+                            let e = slint::invoke_from_event_loop(move || {
+                                gui.clone().unwrap().global::<SideBarInfo>().set_progress_bar(progress);
+                            });
+                            if e.is_err() {println!("{:?}",e.err())}
+                        },
+                        None => (),
+                    }
+                },
+                Err(e) => println!("is locked!")
             }
-            //println!("every 500ms!");
+            let gui = gui_copy.clone();
+            let e = slint::invoke_from_event_loop(move || {
+                let v = gui.clone().unwrap().global::<SearchScreen>().get_loading_ball_position();
+                gui.clone().unwrap().global::<SearchScreen>().set_loading_ball_position(!v);
+            });
+            if e.is_err() {println!("{:?}",e.err())}
+
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     });

@@ -9,6 +9,34 @@ struct SearchData {
 }
 
 
+component Loading inherits Rectangle {
+    in property <bool> ball-position;
+
+    width: 100px;
+    height: 50px;
+
+    VerticalLayout {
+        Text {
+            horizontal-alignment: center;
+            text: "loading";
+            font-size: 14px;
+        }
+        Rectangle {
+            width: 20px;
+            height: 20px;
+            border-radius: 10px;
+            background: #ffffff;
+            x: ball-position ? 10px : 90px; 
+            animate x {
+                duration: 500ms;
+                easing: ease-in-out;
+            }
+        }
+    }
+    
+}
+
+
 export component SearchResult inherits Rectangle {
     height: 60px;
     //width: 100%;
@@ -66,7 +94,8 @@ export component SearchResult inherits Rectangle {
 export component Search inherits Rectangle {
     background: #2b2b2b;
     min-width: 460px;
-
+    
+    in property <bool> is-loading <=> SearchScreen.is-loading;
     in-out property <[SearchData]> results <=> SearchScreen.search_results;
 
     VerticalLayout {
@@ -77,7 +106,7 @@ export component Search inherits Rectangle {
             height: 15px;
         }
 
-        ListView {
+        if (!is-loading) : ListView {
             height: 100%;
 
             for result[i] in results : SearchResult {
@@ -90,6 +119,13 @@ export component Search inherits Rectangle {
 
         }
 
+        if (is-loading) : Loading {
+            
+            ball-position <=> SearchScreen.loading-ball-position;
+        }
+
+
+
     }
 
 }
@@ -99,5 +135,8 @@ export component Search inherits Rectangle {
 export global SearchScreen {
     in property <[SearchData]> search_results;
     callback play_track(string, string, int); //name, artist, result-type ([0,1,2] => [song, album, artist])
+
+    in-out property <bool> loading-ball-position; //changes every 500ms, false = left, true = right, used for animating the loading ball, 
+    in-out property <bool> is-loading; //should display the loading screen
 }
 

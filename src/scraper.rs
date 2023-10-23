@@ -3,7 +3,7 @@ use reqwest::Client;
 use rodio::Decoder;
 use serde_json::Value;
 use stream_download::{http::HttpStream, source::SourceStream, StreamDownload, storage::temp::TempStorageProvider, Settings};
-use std::io::Cursor;
+use std::{io::Cursor, num::ParseIntError};
 
 use serde::{Serialize, Deserialize};
 
@@ -268,7 +268,7 @@ async fn title_and_link_search(html: &String) -> Vec<(Option<String>, Option<Str
                 None => None 
             };
             let titles: Option<String> = match _titles {
-                Some(m) => Some(m.as_str().trim().to_string()),
+                Some(m) => Some(replace_html_char_entities(m.as_str().trim())),
                 None => None 
             };
             (links, titles)
@@ -286,7 +286,7 @@ async fn subhead_search(html: &String) -> Vec<Option<String>> {
         .map(|capture| capture.get(1))
         .map(|s| {
             match s {
-                Some(m) => Some(trim_whitespace(m.as_str())),
+                Some(m) => Some(replace_html_char_entities(trim_whitespace(m.as_str()).as_str())),
                 None => None 
             }
         }).collect::<Vec<Option<String>>>();
@@ -308,6 +308,21 @@ async fn cover_art_search(html: &String) -> Vec<Option<String>> {
             }
         }).collect::<Vec<Option<String>>>();
     return matches;
+}
+
+fn replace_html_char_entities(text: &str) -> String {
+    let reg = Regex::new("&#([0-9]*);").unwrap();
+    let result = reg.replace_all(text, |caps: &regex::Captures<'_>| {
+        let matched = caps.get(1).unwrap().as_str();
+        let num: std::result::Result<i32, ParseIntError> = matched.parse();
+        if num.is_err() {return matched.to_string()}
+        let c = char::from_u32(num.unwrap() as u32);
+        match c {
+            Some(c) => c.to_string(),
+            None => matched.to_string()
+        }
+    });
+    result.to_string()
 }
 
 pub async fn get_stream(download_url: &str) -> Result<StreamDownload<TempStorageProvider>>{

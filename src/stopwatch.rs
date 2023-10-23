@@ -27,10 +27,15 @@ impl StopWatch {
         if self.paused {
             return self.elapsed_time;
         } else {
-            let ret = self.elapsed_time + self.last_measured.elapsed().unwrap();
+            self.elapsed_time += self.last_measured.elapsed().unwrap();
             self.last_measured = SystemTime::now();
-            return ret;
+            return self.elapsed_time;
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.elapsed_time = Duration::new(0, 0);
+        self.last_measured = SystemTime::now();
     }
 
     pub fn pause(&mut self) {

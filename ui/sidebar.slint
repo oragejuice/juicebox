@@ -37,6 +37,9 @@ export component Sidebar inherits Rectangle {
     in property <string> time;
 
 
+
+
+
     VerticalLayout {
         alignment: start;
         padding-top: 15px;
@@ -78,13 +81,17 @@ export component Sidebar inherits Rectangle {
                     image-url: @image-url("img/skip_forward.png");
                 }
             }
+        }
 
+        
+        song_progress := ProgressIndicator {
+            progress <=> SideBarInfo.progress-bar;
         }
     }
 }
 
 export global SideBarInfo {
-    in property <percent> progress_bar;
+    in property <float> progress_bar;
 }
 
 
