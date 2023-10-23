@@ -42,7 +42,4 @@ impl StopWatch {
         self.paused = true;
     }
 
-    pub fn is_paused(&self) -> bool {
-        return self.paused;
-    }
 }

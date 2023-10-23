@@ -74,7 +74,6 @@ async fn main() -> Result<(), slint::PlatformError> {
         {
             match results {
                 Ok(info) => {
-                    println!("playing song!");
                     playback_controller.lock().await.play_stream(info.file);
                     playback_controller.lock().await.stopwatch.reset();
                     let playing_data = controller::Playing {
@@ -112,23 +111,24 @@ async fn main() -> Result<(), slint::PlatformError> {
                     let gui_copy = gui_search_weak.clone();
                     let _ = slint::invoke_from_event_loop(move || {
                         let gui = gui_copy.unwrap();
+                        gui.global::<SearchScreen>().set_showing_album(false);
                         let filtered_results: Vec<scraper::SearchResultType> = res.into_iter().flatten().collect();
                         let widgets_data: Vec<SearchData> = filtered_results.iter()
                             .map(|r| {
                                 match r {
-                                    scraper::SearchResultType::Artist {url,name,image, image_path } => {
+                                    scraper::SearchResultType::Artist {url,name, image: _, image_path } => {
                                         let img_result = Image::load_from_path(Path::new(image_path.as_str()));
                                         SearchData { artist: name.into(), name: "".into(), url: url.into(), result_type: 2, image: img_result.unwrap() }
                                     },
-                                    scraper::SearchResultType::Album {url,name,artist_name,image, image_path } => {
+                                    scraper::SearchResultType::Album {url,name,artist_name,image: _, image_path } => {
                                         let img_result = Image::load_from_path(Path::new(image_path.as_str()));
                                         SearchData { artist: artist_name.into(), name: name.into(), url: url.into(), result_type: 1, image: img_result.unwrap() }
                                     },
-                                    scraper::SearchResultType::Song {url,name,artist_name,image, image_path } => {
+                                    scraper::SearchResultType::Song {url,name,artist_name,image: _, image_path } => {
                                         let img_result = Image::load_from_path(Path::new(image_path.as_str()));
                                         SearchData { artist: artist_name.into(), name: name.into(), url: url.into(), result_type: 0, image: img_result.unwrap() }
                                     },
-                                    scraper::SearchResultType::Label{url,name,image, image_path } => {
+                                    scraper::SearchResultType::Label{url,name, image: _, image_path } => {
                                         let img_result = Image::load_from_path(Path::new(image_path.as_str()));
                                         SearchData { artist: "".into(), name: name.into(), url: url.into(), result_type: 2, image: img_result.unwrap()}
                                     },
@@ -137,7 +137,45 @@ async fn main() -> Result<(), slint::PlatformError> {
                         let widgets_rc = ModelRc::from(Rc::new(VecModel::from(widgets_data)).clone());
                         gui.global::<SearchScreen>().set_search_results(widgets_rc);
                         gui.global::<SearchScreen>().set_is_loading(false);
-                        println!("loading finished");
+
+                    });
+                },
+                Err(_) => ()
+            }
+        }
+    );
+
+    let album_gui_weak = gui.as_weak();
+    let album_loop: mpsc::UnboundedSender<Option<String>> = juiceloop!(
+        Option<String>,
+        query,
+        results,
+        scraper::get_album_info(query.as_str()),
+        {
+            match results {
+                Ok(res) => {
+                    let (tracks, image, artist, album) = res;
+                    let results: Vec<AlbumTrackData> = tracks.iter()
+                        .map(|(url, name)| AlbumTrackData{name: name.into(), url: url.into()})
+                        .collect::<Vec<AlbumTrackData>>();
+
+
+                    let gui_copy = album_gui_weak.clone();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let gui = gui_copy.unwrap();
+                        let results_rc = ModelRc::from(Rc::new(VecModel::from(results)).clone());
+                        let img_result = Image::load_from_path(Path::new(image.as_str()));
+                        match img_result {
+                            Ok(img) => {
+                                gui.global::<SearchScreen>().set_showing_album(true);
+                                gui.global::<AlbumScreen>().set_album_tracks(results_rc);
+                                gui.global::<AlbumScreen>().set_album_name(album.into());
+                                gui.global::<AlbumScreen>().set_album_arist(artist.into());
+                                gui.global::<AlbumScreen>().set_album_art(img);
+                            },
+                            Err(e) => {println!("{:?}", e)}
+                        }
+
 
                     });
                 },
@@ -221,7 +259,7 @@ async fn main() -> Result<(), slint::PlatformError> {
                         None => (),
                     }
                 },
-                Err(e) => println!("is locked!")
+                Err(_) => println!("controller is locked")
             }
             let gui = gui_copy.clone();
             let e = slint::invoke_from_event_loop(move || {
@@ -236,8 +274,11 @@ async fn main() -> Result<(), slint::PlatformError> {
 
     gui.global::<SearchScreen>().on_play_track({
         move |_, url, result_type| {
-            if result_type == 0 {
-                let r = playback_loop.send(Some(url.into()));
+
+            match result_type {
+                0 => {let _ = playback_loop.send(Some(url.into()));},
+                1 => {let _ = album_loop.send(Some(url.into()));},
+                _ => ()
             }
         }
     });

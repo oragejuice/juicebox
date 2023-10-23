@@ -1,5 +1,6 @@
 
-import { ListView } from "std-widgets.slint";
+import { ListView , HorizontalBox} from "std-widgets.slint";
+
 struct SearchData {
     name: string,
     artist: string,
@@ -12,8 +13,6 @@ struct SearchData {
 component Loading inherits Rectangle {
     in property <bool> ball-position;
 
-    width: 100px;
-    height: 50px;
 
     VerticalLayout {
         Text {
@@ -22,9 +21,9 @@ component Loading inherits Rectangle {
             font-size: 14px;
         }
         Rectangle {
-            width: 20px;
-            height: 20px;
-            border-radius: 10px;
+            width: 10px;
+            height: 10px;
+            border-radius: 5px;
             background: #ffffff;
             x: ball-position ? 10px : 90px; 
             animate x {
@@ -32,6 +31,56 @@ component Loading inherits Rectangle {
                 easing: ease-in-out;
             }
         }
+    }
+    
+}
+
+component AlbumTrack inherits Rectangle {
+    in property <string> name <=> name_text.text;
+    in property <string> artist <=> artist_text.text;
+    in property <string> url;
+    callback clicked <=> touch.clicked;
+
+    HorizontalLayout {
+        name_text := Text {}
+        artist_text := Text {}
+    }
+    
+    touch := TouchArea {}
+}
+
+struct AlbumTrackData {
+    name: string,
+    url: string,
+}
+
+export component Album inherits Rectangle {
+
+    in property <string> name <=> album_name.text;
+    in property <string> artist <=> album_artist.text;
+    in property <string> url;
+    in property <image> image <=> img.source;
+
+    in property <[AlbumTrackData]> tracks <=> AlbumScreen.album_tracks;
+
+    VerticalLayout {
+        img := Image {
+            width: 100px;
+            height: 100px;
+        }
+        album_name := Text {}
+        album_artist := Text {}
+        ListView { 
+            height: 100%;
+            for data[i] in tracks : AlbumTrack {
+                name: data.name;
+                url: data.url;
+                clicked => {
+                    debug("AHHH");
+                    SearchScreen.play-track(data.name, data.url, 0);
+                }
+            }
+         }
     }
     
 }
@@ -97,6 +146,7 @@ export component Search inherits Rectangle {
     
     in property <bool> is-loading <=> SearchScreen.is-loading;
     in-out property <[SearchData]> results <=> SearchScreen.search_results;
+    in-out property <bool> showing-album <=> SearchScreen.showing-album;
 
     VerticalLayout {
         alignment: start;
@@ -106,7 +156,7 @@ export component Search inherits Rectangle {
             height: 15px;
         }
 
-        if (!is-loading) : ListView {
+        if (!is-loading && !showing-album) : ListView {
             height: 100%;
 
             for result[i] in results : SearchResult {
@@ -116,21 +166,24 @@ export component Search inherits Rectangle {
                 result-type: result.result-type;
                 image: result.image;
             }
-
         }
 
-        if (is-loading) : Loading {
-            
-            ball-position <=> SearchScreen.loading-ball-position;
+        if (!is-loading && showing-album) : Album {
+            name: AlbumScreen.album-name;
+            artist: AlbumScreen.album-arist;
+            image: AlbumScreen.album-art;
         }
 
-
+        if (is-loading) : HorizontalBox {
+            alignment: center;
+            Loading {
+                ball-position <=> SearchScreen.loading-ball-position;
+            }
+        }
 
     }
 
 }
-
-
 
 export global SearchScreen {
     in property <[SearchData]> search_results;
@@ -138,5 +191,15 @@ export global SearchScreen {
 
     in-out property <bool> loading-ball-position; //changes every 500ms, false = left, true = right, used for animating the loading ball, 
     in-out property <bool> is-loading; //should display the loading screen
+    in-out property <bool> showing-album;
+}
+
+export global AlbumScreen {
+    in property <[AlbumTrackData]> album_tracks;
+    in property <string> album-name;
+    in property <string> album-arist;
+    in property <image> album-art;
+
+
 }
 

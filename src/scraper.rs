@@ -13,20 +13,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 
 
-
-pub async fn get_download_url(song_url: String) -> Result<Option<String>> {
-    let html = reqwest::get(song_url)
-        .await?
-        .text()
-        .await?;
-
-    let link_regex = Regex::new(r";https:\/\/t4\.bcbits\.com\/stream\/.*?\;}").unwrap();
-    let result = link_regex.find(&html)
-                                            .map(|s: regex::Match<'_>| s.as_str()[1..s.as_str().len() - 2].to_string());
-
-    return Ok(result);
-}
-
 //returns download_url, track image, track name, artist name and 
 pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
 
@@ -39,21 +25,27 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
 
     let html_time = std::time::SystemTime::now();
 
-    let link_regex = Regex::new(r";https:\/\/t4\.bcbits\.com\/stream\/.*?\;}").unwrap();
+    let link_regex = Regex::new(r#"https://t4\.bcbits\.com/stream/.*?;}"#).unwrap();
     let download_url = link_regex.find(&html)
-                                            .map(|s: regex::Match<'_>| s.as_str()[1..s.as_str().len() - 2].to_string());
+                                            .map(|s: regex::Match<'_>| s.as_str()[0..s.as_str().len() - 2].to_string())
+                                            .expect(format!("failed to find download url for song of url {}, this is a bug!", song_url).as_str());
+    
 
-    let reader = get_stream(download_url.unwrap().as_str()).await?;
+    let reader = get_stream(download_url.as_str()).await?;
 
-    let json = parse_for_album(html.as_str()).await?;
+    let _json = parse_for_album(html.as_str()).await;
+    if _json.is_err() {
+        eprintln!("failed to load json for track {}", song_url);
+    }
+    let json = _json.unwrap();
     let image = json["image"].as_str().unwrap();
     let artist = json["inAlbum"]["byArtist"]["name"].to_string();
     let album = json["inAlbum"]["name"].to_string();
     let _name = json["name"].to_string();
     let name = _name[1.._name.len()-1].to_string();
-    let image_path = format!("juicebox/cache/{}.jpg", sanitize_filename(str::replace(name.as_str(), " ", "_")));
+    //let image_path = format!("juicebox/cache/{}.jpg", sanitize_filename(str::replace(name.as_str(), " ", "_")));
 
-    let song_length = ISO8601DateInterval_to_seconds(json["duration"].as_str().unwrap()).unwrap();
+    let song_length = iso8601_date_interval_to_seconds(json["duration"].as_str().unwrap()).unwrap();
 
     let parsing_time = std::time::SystemTime::now();
 
@@ -81,23 +73,43 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
      })       
 }
 
-pub async fn get_album_info(album_url: &str) -> Result<(Vec<String>, String)> {
+//((url, name) image, artist, album name)
+pub async fn get_album_info(album_url: &str) -> Result<(Vec<(String, String)>, String, String, String)> {
     let html = reqwest::get(album_url)
         .await?
         .text()
         .await?;
 
-    let json = parse_for_album(&html).await?;
+    let json = parse_for_album(&html).await.expect(format!("failed to load album json for {}, this is a bug!", album_url).as_str());
     let image = json["image"].to_string();
     let album_release = json["albumRelease"].to_string();
+    let num_of_tracks = json["numTracks"].as_u64().unwrap();
+    let artist = json["byArtist"]["name"].to_string();
+    let album_name = json["name"].as_str().unwrap().to_string();
+    //println!("number of tracks: {num_of_tracks}");
 
-    let link_regex = Regex::new(r#"https://([^" ]*?).bandcamp\.com/track/([^" ]*?)"#).unwrap();
-    let tracks = link_regex.find_iter(&album_release)
-        .map(|m| m.as_str().to_string())
+    let image_path = storage::retrieve_image(&image, &album_name).await?;
+    //println!("image for album {} {}", album_name, image_path);
+    let track_names: Vec<String> = json["track"]["itemListElement"].as_array().unwrap().iter()
+                                        .map(|v| v["item"]["name"].as_str().unwrap().to_string())
+                                        .collect::<Vec<String>>();
+
+    //println!("track names {:?}", track_names);
+
+    let tracks = json["albumRelease"].as_array().unwrap().iter()
+        .skip(3) //first 3 elements are totally useless
+        .map(|v| v["@id"].as_str().unwrap().to_string())
         .collect::<Vec<String>>();
 
+    //println!("{:#?}", tracks);
 
-    Ok((tracks, image.to_string()))
+    // let link_regex = Regex::new(r#"https://([^" ]*?).bandcamp\.com/track/([^" ]*?)""#).unwrap();
+    // let tracks = link_regex.find_iter(&album_release)
+    //     .map(|m| m.as_str().to_string())
+    //     .collect::<Vec<String>>();
+
+    let album_tracks: Vec<(String, String)> = tracks.into_iter().zip(track_names).collect::<Vec<(String, String)>>();
+    Ok((album_tracks, image_path, artist, album_name))
 
 }
 
@@ -114,7 +126,7 @@ pub fn sanitize_filename(name: String) -> String {
     re.replace_all(name.as_str(), "_").to_string()
 }
 
-fn ISO8601DateInterval_to_seconds(value: &str) -> Option<i32> {
+fn iso8601_date_interval_to_seconds(value: &str) -> Option<i32> {
     let parser_regex = Regex::new(r#"P([0-9][0-9])H([0-9][0-9])M([0-9][0-9])S"#).unwrap();
     let capture = parser_regex.captures(value)?;
     let hours = str::parse::<i32>(capture.get(1)?.as_str()).unwrap();
@@ -334,16 +346,17 @@ pub async fn get_stream(download_url: &str) -> Result<StreamDownload<TempStorage
     Ok(reader)
 }
 
-pub async fn parse_for_album(html: &str) -> Result<Value> {
+pub async fn parse_for_album(html: &str) -> std::result::Result<Value, ()> {
 
     let json_regex: Regex  = RegexBuilder::new(r#"<script type="application/ld\+json">(.*?)</script>"#)
     .dot_matches_new_line(true)
     .build()
     .unwrap();
     let matches = json_regex.find(&html);
+    if matches.is_none() {return Err(());}
     let _jsonld = matches.unwrap().as_str();
     let jsonld = &_jsonld[43.._jsonld.len() - 14];
-    let v: Value = serde_json::from_str(jsonld)?;
+    let v: Value = serde_json::from_str(jsonld).expect("failed to load json!");
     //println!("{:?}", v);
     Ok(v)
 }

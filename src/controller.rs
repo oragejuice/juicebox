@@ -1,9 +1,9 @@
 
 use std::{io::Error, time::Duration};
-use rodio::{Decoder, Sink, Source};
+use rodio::{Decoder, Sink};
 use stream_download::{StreamDownload, storage::temp::TempStorageProvider};
 
-use crate::{stopwatch::StopWatch};
+use crate::stopwatch::StopWatch;
 
 
 pub struct Controller {
@@ -44,9 +44,7 @@ impl Controller {
 
     pub fn play_stream(&mut self, source: Decoder<StreamDownload<TempStorageProvider>>) {
         self.sink.clear();
-        println!("cleared sink");
         let _ = &self.sink.append(source);
-        println!("appeneded to sink");
         self.play();
     }
 
