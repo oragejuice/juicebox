@@ -51,7 +51,7 @@ macro_rules! juiceloop {
 
 
 #[tokio::main]
-async fn main() -> Result<(), slint::PlatformError>{
+async fn main() -> Result<(), slint::PlatformError> {
 
     let _ = storage::create_folder().await;
 
@@ -187,10 +187,24 @@ async fn main() -> Result<(), slint::PlatformError>{
         }
     });
 
+    let gui_loop_weak = gui.as_weak();
+    let loop_controller = controller.clone();
+    tokio::spawn(async move {
+        loop {
+            let gui_copy = gui_loop_weak.clone();
+            let a = &loop_controller.lock().await.track_data;
+            if a.is_some() {
+                println!("track length {:?}", a.as_ref().unwrap().track_length);
+            }
+            //println!("every 500ms!");
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+    });
+
     gui.global::<SearchScreen>().on_play_track({
         move |_, url, result_type| {
             if result_type == 0 {
-                let _ = playback_loop.send(Some(url.into()));
+                let r = playback_loop.send(Some(url.into()));
             }
         }
     });

@@ -44,7 +44,6 @@ impl Controller {
 
     pub fn play_stream(&mut self, source: Decoder<StreamDownload<TempStorageProvider>>) {
         self.sink.clear();
-        println!("song length is: {:?}", source.total_duration());
         let _ = &self.sink.append(source);
         self.play();
     }

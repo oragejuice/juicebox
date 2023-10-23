@@ -57,18 +57,22 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
 
     let parsing_time = std::time::SystemTime::now();
 
-    println!("image url: {}, image path {}, name {}", image, image_path, name.as_str());
+    //println!("image url: {}, image path {}, name {}", image, image_path, name.as_str());
     //fetch_url(image.to_string(), image_path.clone()).await?;
     let image_path = retrieve_image(image, name.as_str()).await?;
 
     let caching_time = std::time::SystemTime::now();
 
-    println!("html download {:?}, json parsing {:?}, caching image {:?}",
+    println!("loading song timings: html download {:?}, json parsing {:?}, caching image {:?}",
      html_time.duration_since(start_time),parsing_time.duration_since(html_time), caching_time.duration_since(parsing_time));
 
+    let f = rodio::Decoder::new_mp3(reader);
+    if f.is_err() {
+        println!("failed to load stream due to {:?}", f.as_ref().err());
+    }
 
      Ok(TrackInfo{
-        file: rodio::Decoder::new(reader)?,
+        file: f?,
         name: name,
         album: album,
         artist: artist,
@@ -160,7 +164,7 @@ pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
     let mut ret: Vec<Option<SearchResultType>> = vec![];
     for res in search_results {
         let (item, (subhead,(image, (link, title)))) = res;
-        let file_path = format!("juicebox/cache/{}.jpg", sanitize_filename(title.clone().unwrap().to_string()));
+        let file_path = format!("juicebox/cache/images/{}.jpg", sanitize_filename(title.clone().unwrap().to_string()));
         ret.push(get_result_type(link, title, image, subhead, item, &Some(file_path)));
     }
 
@@ -312,7 +316,6 @@ pub async fn get_stream(download_url: &str) -> Result<StreamDownload<TempStorage
     let reader: StreamDownload<TempStorageProvider> =
     StreamDownload::from_stream(stream, TempStorageProvider::new(), Settings::default())
         .await?;
-
     Ok(reader)
 }
 

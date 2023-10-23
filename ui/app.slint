@@ -2,7 +2,7 @@
 import {Sidebar, SideBarInfo} from "sidebar.slint";
 import {SearchBar} from "searchbar.slint";
 import {Home, Search, Playlists, Settings, SearchScreen} from "screens/screens.slint";
-import { TabWidget } from "std-widgets.slint";
+import { TabWidget , VerticalBox} from "std-widgets.slint";
 
 export { SearchScreen, SideBarInfo }
 
@@ -27,20 +27,20 @@ export component App inherits Window {
 
     HorizontalLayout {
 
-
-
-        sidebar := Sidebar {
-        }
+        sidebar := Sidebar {}
 
         VerticalLayout {
+            search_bar := SearchBar{}
 
-            search_bar := SearchBar {}
-            
-            if(search-bar.current_item == 0) : Home{}
-            if(search-bar.current_item == 1) : Search {}
-            if(search-bar.current_item == 2) : Playlists {}
-            if(search-bar.current_item == 3) : Settings {}
-        }
+            if (search-bar.current-item == 0) : Home {}
+            if (search-bar.current-item == 1) : Search {}
+            if (search-bar.current-item == 2) : Playlists {}
+            if (search-bar.current-item == 3) : Settings {}
+
+        }          
+
+        
+
 
 
     }
