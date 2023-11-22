@@ -18,9 +18,12 @@ pub async fn create_folder() -> Result<()>{
     if !Path::new("juicebox/cache/images/").exists().await {
         fs::create_dir("juicebox/cache/images")?;
     }
+    if !Path::new("juicebox/playlists/").exists().await {
+        fs::create_dir("juicebox/playlists/")?;
+    }
     if !Path::new("juicebox/cache/tracks.json").exists().await {
         let mut file = File::create("juicebox/cache/tracks.json")?;
-        file.write_all("[]".as_bytes());
+        file.write_all("[]".as_bytes())?;
     }
 
     Ok(())
