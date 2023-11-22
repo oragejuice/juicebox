@@ -1,4 +1,4 @@
-import { ProgressIndicator } from "std-widgets.slint";
+import { ProgressIndicator , ListView} from "std-widgets.slint";
 
 component MediaButton inherits TouchArea {
 
@@ -39,59 +39,93 @@ export component Sidebar inherits Rectangle {
 
 
 
-
-    VerticalLayout {
-        alignment: start;
-        padding-top: 15px;
-        padding-bottom: 30px;
-        spacing: 10px;
-        padding-left: 30px;
-        padding-right: 30px;
-        art := Rectangle {   
-            width: 120px;
-            height: 120px;
-            border-width: 1px;
-            border-color: #3f3f3f;
-            cover := Image {
-                height: 120px;
+    Rectangle {
+        height: 100%;
+        VerticalLayout {
+            alignment: start;
+            padding-top: 15px;
+            spacing: 10px;
+            padding-left: 30px;
+            padding-right: 30px;
+            art := Rectangle {   
                 width: 120px;
-                source: @image-url("");
-            }
-        }
-
-        title := Text {
-            horizontal-alignment: center;
-            font-size: 16px;
-        }
-
-        media_controls := Rectangle {
-
-
-            HorizontalLayout {
-                alignment: space-around;
-
-                skip_forward := MediaButton {
-
-                    image-url: @image-url("img/skip_back.png");
-                }
-                play := MediaButton {
-                    image-url: is-paused ? @image-url("img/play.png") : @image-url("img/pause.png");
-                }
-                skip_back := MediaButton {
-                    image-url: @image-url("img/skip_forward.png");
+                height: 120px;
+                border-width: 1px;
+                border-color: #3f3f3f;
+                border-radius: 10px;
+                clip: true;
+                cover := Image {
+                    height: 120px;
+                    width: 120px;
                 }
             }
-        }
+            Rectangle {
+                height: 18px;
+                title := Text {
+                    horizontal-alignment: center;
+                    font-size: 16px;
+                }
+            }
 
-        
-        song_progress := ProgressIndicator {
-            progress <=> SideBarInfo.progress-bar;
+            media_controls := Rectangle {
+
+                HorizontalLayout {
+                    alignment: space-around;
+
+                    skip_forward := MediaButton {
+
+                        image-url: @image-url("img/skip_back.svg");
+                    }
+                    play := MediaButton {
+                        image-url: is-paused ? @image-url("img/play.svg") : @image-url("img/pause.svg");
+                    }
+                    skip_back := MediaButton {
+                        image-url: @image-url("img/skip_forward.svg");
+                    }
+                }
+            }
+
+
+            song_progress := ProgressIndicator {
+                progress <=> SideBarInfo.progress-bar;
+            }
+            
+
+            
+            queue := Rectangle {
+                background: #0d0d0d;
+                border-color: #585858;
+                border-width: 1px;
+                border-radius: 10px;
+                height: 200px;
+                VerticalLayout {
+                    padding-left: 10px;
+                    padding-top: 10px;
+                    alignment: start;
+                    ListView { 
+                        width: 100px;
+                        for track[i] in SideBarInfo.queue : Rectangle {
+                            width: 90px;
+                            background: #3f3f3f;
+                            border-radius: 5px;
+                            Text {
+                                horizontal-alignment: left;
+                                vertical-alignment: center;
+                                text: i + ". " + track;
+                                font-size: 10px;
+                            }
+                        }
+                    }
+                }
+            }
+            
         }
     }
 }
 
 export global SideBarInfo {
     in property <float> progress_bar;
+    in-out property <[string]> queue;
 }
 
 

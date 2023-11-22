@@ -1,16 +1,17 @@
 
-use std::{io::Error, time::Duration};
+use std::{io::Error, time::Duration, collections::VecDeque};
 use rodio::{Decoder, Sink};
 use stream_download::{StreamDownload, storage::temp::TempStorageProvider};
 
-use crate::stopwatch::StopWatch;
+use crate::{stopwatch::StopWatch, scraper};
 
 
 pub struct Controller {
     is_paused: bool,
     pub sink: Sink,
     pub stopwatch: StopWatch,
-    pub track_data: Option<Playing>
+    pub track_data: Option<Playing>,
+    pub queue: VecDeque<(String, String)>
 }
 
 impl Controller {
@@ -68,8 +69,9 @@ pub fn new(sink: Sink) -> Controller{
         is_paused: true,
         sink: sink,
         stopwatch: StopWatch::new(),
-        track_data: None
-}
+        track_data: None,
+        queue: VecDeque::<(String, String)>::new()
+    }
 }
 
 pub enum MediaControlIns {

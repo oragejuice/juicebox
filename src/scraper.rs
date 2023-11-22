@@ -3,7 +3,7 @@ use reqwest::Client;
 use rodio::Decoder;
 use serde_json::Value;
 use stream_download::{http::HttpStream, source::SourceStream, StreamDownload, storage::temp::TempStorageProvider, Settings};
-use std::{io::Cursor, num::ParseIntError};
+use std::{io::Cursor, num::ParseIntError, time::Duration};
 
 use serde::{Serialize, Deserialize};
 
@@ -15,8 +15,10 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 //returns download_url, track image, track name, artist name and 
 pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
-
     let start_time = std::time::SystemTime::now();
+
+    let p = storage::retrieve_from_cache(song_url.clone()).await;
+    //dbg!(p);
 
     let html = reqwest::get(song_url.clone())
         .await?
@@ -39,32 +41,41 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
     }
     let json = _json.unwrap();
     let image = json["image"].as_str().unwrap();
-    let artist = json["inAlbum"]["byArtist"]["name"].to_string();
-    let album = json["inAlbum"]["name"].to_string();
+    let artist = json["byArtist"]["name"].to_string();
+    let album = json["inAlbum"]["name"].as_str().unwrap().to_string();
     let _name = json["name"].to_string();
     let name = _name[1.._name.len()-1].to_string();
     //let image_path = format!("juicebox/cache/{}.jpg", sanitize_filename(str::replace(name.as_str(), " ", "_")));
-
     let song_length = iso8601_date_interval_to_seconds(json["duration"].as_str().unwrap()).unwrap();
 
     let parsing_time = std::time::SystemTime::now();
 
     //println!("image url: {}, image path {}, name {}", image, image_path, name.as_str());
     //fetch_url(image.to_string(), image_path.clone()).await?;
-    let image_path = retrieve_image(image, name.as_str()).await?;
+    let image_path = retrieve_image(image).await?;
 
     let caching_time = std::time::SystemTime::now();
 
     println!("loading song timings: html download {:?}, json parsing {:?}, caching image {:?}",
-     html_time.duration_since(start_time),parsing_time.duration_since(html_time), caching_time.duration_since(parsing_time));
+    html_time.duration_since(start_time),parsing_time.duration_since(html_time), caching_time.duration_since(parsing_time));
 
     let f = rodio::Decoder::new_mp3(reader);
     if f.is_err() {
         println!("failed to load stream due to {:?}", f.as_ref().err());
     }
+    let c = storage::cache_song(storage::CachedTrack {
+            name: name.clone(),
+            artist: artist.clone(),
+            album: album.clone(), 
+            track_url: song_url, 
+            download_url: download_url.clone(), 
+            image_path: image_path.clone(), 
+            track_length: song_length 
+        }).await;
 
      Ok(TrackInfo{
         file: f?,
+        download_url: download_url,
         name: name,
         album: album,
         artist: artist,
@@ -73,42 +84,55 @@ pub async fn get_track_info(song_url: String) -> Result<TrackInfo> {
      })       
 }
 
-//((url, name) image, artist, album name)
-pub async fn get_album_info(album_url: &str) -> Result<(Vec<(String, String)>, String, String, String)> {
+//((url, name, time) image, artist, album name)
+//THERE IS A BUG HERE WHERE LINKS AND NAMES (((SOMETIMES))) DONT ALIGN, CHECK THIS OUT AT SOME POINT
+pub async fn get_album_info(album_url: &str) -> Result<(Vec<(String, String, Duration)>, String, String, String)> {
     let html = reqwest::get(album_url)
         .await?
         .text()
         .await?;
 
     let json = parse_for_album(&html).await.expect(format!("failed to load album json for {}, this is a bug!", album_url).as_str());
-    let image = json["image"].to_string();
-    let album_release = json["albumRelease"].to_string();
-    let num_of_tracks = json["numTracks"].as_u64().unwrap();
-    let artist = json["byArtist"]["name"].to_string();
+    let image = json["image"].as_str().unwrap().to_string();
+    let artist = json["byArtist"]["name"].as_str().unwrap().to_string();
     let album_name = json["name"].as_str().unwrap().to_string();
-    //println!("number of tracks: {num_of_tracks}");
+    let number_of_items: usize = json["numTracks"].as_u64().unwrap().try_into().unwrap();
+    let skip_amount: usize = json["albumRelease"].as_array().unwrap().len() - number_of_items;
 
-    let image_path = storage::retrieve_image(&image, &album_name).await?;
-    //println!("image for album {} {}", album_name, image_path);
+
+    let image_path = storage::retrieve_image(&image).await?;
+    
+    //names
     let track_names: Vec<String> = json["track"]["itemListElement"].as_array().unwrap().iter()
+                                        .skip(0)
                                         .map(|v| v["item"]["name"].as_str().unwrap().to_string())
                                         .collect::<Vec<String>>();
+    
+    //some pretty bad code i should uhhh sort this out
+    //times 
+    let track_times: Vec<Duration> = json["track"]["itemListElement"].as_array().unwrap().iter()
+                                        .skip(0)
+                                        .map(|v| v["item"]["duration"].as_str().unwrap().to_string())
+                                        .map(|v| Duration::from_secs(iso8601_date_interval_to_seconds(v.as_str()).unwrap().try_into().unwrap()))
+                                        .collect::<Vec<Duration>>();
 
-    //println!("track names {:?}", track_names);
-
+    //urls
     let tracks = json["albumRelease"].as_array().unwrap().iter()
-        .skip(3) //first 3 elements are totally useless
+        .skip(skip_amount) 
         .map(|v| v["@id"].as_str().unwrap().to_string())
         .collect::<Vec<String>>();
 
-    //println!("{:#?}", tracks);
 
-    // let link_regex = Regex::new(r#"https://([^" ]*?).bandcamp\.com/track/([^" ]*?)""#).unwrap();
-    // let tracks = link_regex.find_iter(&album_release)
-    //     .map(|m| m.as_str().to_string())
-    //     .collect::<Vec<String>>();
+    let album_tracks: Vec<(String, String, Duration)> = tracks.iter()
+        .zip(track_names)
+        .zip(track_times)
+        .map(|((a,b,),c)| {
+            (a.to_owned(),b,c)
+        })
+        .collect();
 
-    let album_tracks: Vec<(String, String)> = tracks.into_iter().zip(track_names).collect::<Vec<(String, String)>>();
+    //println!("album {album_url}, with songs: {:?}, skipped first {skip_amount} songs", album_tracks);
+
     Ok((album_tracks, image_path, artist, album_name))
 
 }
@@ -122,8 +146,8 @@ pub async fn fetch_url(url: String, file_name: String) -> Result<()> {
 }
 
 pub fn sanitize_filename(name: String) -> String {
-    let re = Regex::new(r"[#.&%/\\*!$<>{}?| ]").unwrap();
-    re.replace_all(name.as_str(), "_").to_string()
+    let re = Regex::new(r#"[#.&%/\\*!$<>{}?|"_ ]"#).unwrap();
+    re.replace_all(name.as_str(), "").to_string()
 }
 
 fn iso8601_date_interval_to_seconds(value: &str) -> Option<i32> {
@@ -145,8 +169,8 @@ pub fn trim_whitespace(s: &str) -> String {
         prev = ch;
         result
     });
-    let re = Regex::new(r"(\\n|\\t)").unwrap();
-    re.replace_all(&new_str, " ").to_string()
+    let re = Regex::new(r"\n|\t").unwrap();
+    re.replace_all(&new_str, "").to_string()
 }
 
 pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
@@ -176,7 +200,7 @@ pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
     let mut ret: Vec<Option<SearchResultType>> = vec![];
     for res in search_results {
         let (item, (subhead,(image, (link, title)))) = res;
-        let file_path = format!("juicebox/cache/images/{}.jpg", sanitize_filename(title.clone().unwrap().to_string()));
+        let file_path = format!("juicebox/cache/images/{}.jpg", sanitize_filename(str::replace(image.clone().unwrap().as_str(), "https://f4.bcbits.com/img/", "")));
         ret.push(get_result_type(link, title, image, subhead, item, &Some(file_path)));
     }
 
@@ -185,16 +209,20 @@ pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
             Some(res) => {
                 match res {
                     SearchResultType::Artist { url, name, image, image_path } => {
-                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        //Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        Some(storage::retrieve_image(&image))
                     },
                     SearchResultType::Album { url, name, artist_name, image, image_path } => {
-                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        //Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        Some(storage::retrieve_image(&image))
                     },
                     SearchResultType::Label { url, name, image, image_path } => {
-                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        //Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        Some(storage::retrieve_image(&image))
                     },
                     SearchResultType::Song { url: _, name, artist_name, image, image_path } => {
-                        Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        //Some(storage::retrieve_image_from_path_or(image.as_str(), image_path.as_str()))
+                        Some(storage::retrieve_image(&image))
                     },
                 }
             },
@@ -216,37 +244,6 @@ pub async fn search_for(query: &str) -> Result<Vec<Option<SearchResultType>>> {
 
     Ok(ret)
 }
-/*
-pub async fn search_for(search: &str) -> Result<Vec<SearchResultType>> {
-    let search_url = "https://bandcamp.com/search?q=".to_string() + search;
-
-    let start_time = std::time::SystemTime::now();
-    let html = reqwest::get(search_url)
-        .await?
-        .text()
-        .await?;
-    let html_time = std::time::SystemTime::now();
-
-    let link_regex = Regex::new(r">https:\/\/(.*?)\.bandcamp\.com(.*)<\/a>").unwrap();
-    let mut matches = link_regex.find_iter(&html).map(|s| s.as_str()).collect::<Vec<&str>>();
-    let regex_time = std::time::SystemTime::now();
-
-    let results: Vec<SearchResultType> = matches.par_iter_mut()
-        .map(|s| s[1..s.len()-4].to_string())
-        .map(|s| get_result_type(s))
-        .collect();
-
-    let mapping_time = std::time::SystemTime::now();
-
-    let loading = html_time.duration_since(start_time)?;
-    let doing_regex = regex_time.duration_since(html_time)?;
-    let mappings_time = mapping_time.duration_since(regex_time);
-    let total_time = mapping_time.duration_since(start_time);
-    println!("html loading time {:?}, regex time: {:?}, mapping time {:?}, total {:?} for query {search}", loading, doing_regex, mappings_time, total_time);
-
-    Ok(results)
-}
-*/
 
 async fn item_type_search(html: &String) -> Vec<Option<String>> {
     
@@ -276,7 +273,7 @@ async fn title_and_link_search(html: &String) -> Vec<(Option<String>, Option<Str
         .map(|s| {
             let (_links, _titles) = s;
             let links = match _links {
-                Some(m) => Some(m.as_str().trim().to_string()),
+                Some(m) => Some(trim_search_url(m.as_str().trim()).to_string()),
                 None => None 
             };
             let titles: Option<String> = match _titles {
@@ -337,6 +334,14 @@ fn replace_html_char_entities(text: &str) -> String {
     result.to_string()
 }
 
+fn trim_search_url(url: &str) -> &str {
+    let question_mark = url.find('?');
+    match question_mark {
+        Some(index) => &url[0..index],
+        None => url
+    }
+}
+
 pub async fn get_stream(download_url: &str) -> Result<StreamDownload<TempStorageProvider>>{
     let stream = HttpStream::<Client>::create(download_url.parse()?,).await?;
 
@@ -363,6 +368,7 @@ pub async fn parse_for_album(html: &str) -> std::result::Result<Value, ()> {
 
 pub struct TrackInfo {
     pub file: Decoder<StreamDownload<TempStorageProvider>>,
+    pub download_url: String,
     pub name: String,
     pub album: String,
     pub artist: String,

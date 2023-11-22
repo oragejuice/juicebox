@@ -1,5 +1,5 @@
 
-import { ListView , HorizontalBox} from "std-widgets.slint";
+import { ListView , HorizontalBox, VerticalBox} from "std-widgets.slint";
 
 struct SearchData {
     name: string,
@@ -25,7 +25,7 @@ component Loading inherits Rectangle {
             height: 10px;
             border-radius: 5px;
             background: #ffffff;
-            x: ball-position ? 10px : 90px; 
+            x: ball-position ? 0px : 90px; 
             animate x {
                 duration: 500ms;
                 easing: ease-in-out;
@@ -36,112 +36,244 @@ component Loading inherits Rectangle {
 }
 
 component AlbumTrack inherits Rectangle {
-    in property <string> name <=> name_text.text;
-    in property <string> artist <=> artist_text.text;
-    in property <string> url;
-    callback clicked <=> touch.clicked;
 
-    HorizontalLayout {
-        name_text := Text {}
-        artist_text := Text {}
+    in property <string> name <=> name_text.text;
+    in property <string> url;
+    in property <string> time <=> time_text.text;
+    in property <int> index;
+
+
+    callback clicked <=> touch.clicked;
+    height: 40px;
+    padding: 2px;
+    inner := Rectangle {
+        background: #1A1A1A;
+        height: 36px;
+        border-radius: 6px;
+        touch := TouchArea {
+            HorizontalLayout {
+                padding: 4px;
+                alignment: space-between;
+                HorizontalLayout {
+                alignment: start;
+                spacing: 10px;
+                    Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        background: #242424;
+                        Text {
+                            text: index;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 16px;
+                            color: #ffffff;
+
+                        }
+                        border-radius: 6px;
+                    }
+                    name_text := Text {
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: 16px;
+                        color: #ffffff;
+                    }
+                }
+                Rectangle {
+                    padding-right: 10px;
+                    time_text := Text {
+                        horizontal-alignment: left;
+                        vertical-alignment: center;
+                        color: #585858;
+                        font-size: 12px;
+                    }
+                }
+            }
+        }
     }
     
-    touch := TouchArea {}
 }
 
 struct AlbumTrackData {
     name: string,
     url: string,
+    time: string
 }
 
 export component Album inherits Rectangle {
 
     in property <string> name <=> album_name.text;
-    in property <string> artist <=> album_artist.text;
+    in property <string> artist;
     in property <string> url;
     in property <image> image <=> img.source;
 
     in property <[AlbumTrackData]> tracks <=> AlbumScreen.album_tracks;
+    height: 100%;
 
     VerticalLayout {
-        img := Image {
-            width: 100px;
-            height: 100px;
-        }
-        album_name := Text {}
-        album_artist := Text {}
-        ListView { 
-            height: 100%;
-            for data[i] in tracks : AlbumTrack {
-                name: data.name;
-                url: data.url;
-                clicked => {
-                    debug("AHHH");
-                    SearchScreen.play-track(data.name, data.url, 0);
+
+        Rectangle {
+            HorizontalLayout {
+                padding-left: 10px;
+                Rectangle {
+                    width: 100px;
+                    height: 100px;
+                    border-radius: 10px;
+                    clip: true;
+                    img := Image {
+                        width: 100px;
+                        height: 100px;
+                    }
+                }
+
+                VerticalBox { 
+                    padding-top: 5px;
+                    alignment: start;
+                    album_name := Text {
+                        font-size: 20px;
+                    }
+                    album_artist := Text {
+                        text: "by " + artist;
+                        font-size: 16px;
+                    }
                 }
             }
-         }
+            
+        }
+
+        Rectangle {
+            ListView { 
+                height: 100%;
+                for data[i] in tracks : AlbumTrack {
+                    name: data.name;
+                    url: data.url;
+                    time: data.time;
+                    index: i;
+                    clicked => {SearchScreen.play-track(data.name, data.url, 0);}
+                }
+             }
+        }
+
     }
     
 }
 
-
 export component SearchResult inherits Rectangle {
-    height: 60px;
-    //width: 100%;
+    height: 70px;
 
     in property <string> name <=> name.text;
     in property <string> artist <=> artist.text;
     in property <string> url;
     in property <int> result_type; // song = 0, album = 1, artist = 2
     in property <image> image <=> img.source;
+    Rectangle { 
 
-    inner := Rectangle {
-        height: 60px;
         padding: 5px;
-        TouchArea {
-            clicked => {SearchScreen.play-track(root.name, root.url, root.result-type)}
-            HorizontalLayout {
-                //padding-left: 5px;
-                Rectangle {
-                    width: 50px;
-                    img := Image {
+        inner := Rectangle {
+            height: 60px;
+            border-radius: 6px;
+            background: #1A1A1A;
+            touch := TouchArea {
+                clicked => {SearchScreen.play-track(root.name, root.url, root.result-type)}
+                pointer-event(event) => {
+                    if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                        debug("show options per track");
+                    } 
+                }
+                HorizontalLayout {
+                    padding: 5px;
+                    padding-right: 10px;
+                    Rectangle {
                         width: 50px;
                         height: 50px;
+                        img := Image {
+                            width: 50px;
+                            height: 50px;
+                        }
+                        border-radius: 5px;
+                        clip: true;
+                        border-color: #ffffff;
                     }
-                }
-                Rectangle {
-                    width: 100%;
-                    padding: 10px;
-                    VerticalLayout {
-                        alignment: start;
-                        padding-top: 5px;
-                        padding-left: 10px;
-                        spacing: 2px;
-                        name := Text {
-                            font-size: 14px;
+                    Rectangle {
+                        
+                        HorizontalLayout {
+                        alignment: space-between;
+                        VerticalLayout {
+                            alignment: start;
+                            padding-top: 5px;
+                            padding-left: 10px;
+                            spacing: 2px;
+                            name := Text {
+                                font-size: 18px;
+                                color: #fff;
+                                overflow: elide;
+                            }
+                            artist := Text {
+                                font-size: 12px;
+                                color: #585858;
+                                overflow: elide;
+                            }
+
                         }
-                        artist := Text {
-                            font-size: 10px;
+
                         }
-                        type := Text {
-                            text: display-result-type(result-type);
-                        }
+
                     }
+                    Rectangle {
+                        width: 60px;
+                            HorizontalLayout {
+                                padding-top: 15px;
+                                spacing: 10px;
+                                padding-right: 10px;
+                                alignment: end;
+                                if (result-type == 0 ) : Rectangle {
+                                    width: 20px;
+                                    height: 20px;
+                                    Image {
+                                        width: 20px;
+                                        height: 20px;
+                                        source: @image-url("../img/queue_add.svg");
+                                        opacity: touch.has-hover ? 100% : 0%;
+                                        animate opacity {
+                                             duration: 100ms;
+                                        }
+                                    }
+                                    TouchArea {
+                                        clicked => {
+                                            SearchScreen.add-to-queue(root.name, root.url);
+                                        }
+                                    }
+                                }
+                                Rectangle {
+                                    width: 20px;
+                                    height: 20px;
+                                    Image {
+                                        width: 20px;
+                                        height: 20px;
+                                        source: @image-url("../img/plus.svg");
+                                        opacity: touch.has-hover ? 100% : 0%;
+                                        animate opacity {
+                                             duration: 100ms;
+                                        }
+                                    }
+                                    TouchArea {
+                                        clicked => {
+                                            debug("added to playlist!")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+    
                 }
 
             }
         }
-    }
 
-    public pure function display_result_type(value: int) -> string {
-        value == 0 ? "Track" : ( value == 1 ? "Album" : "Artist")
     }
-
 }
 
 export component Search inherits Rectangle {
-    background: #2b2b2b;
+    background: #0E0E0E;
     min-width: 460px;
     
     in property <bool> is-loading <=> SearchScreen.is-loading;
@@ -170,8 +302,8 @@ export component Search inherits Rectangle {
 
         if (!is-loading && showing-album) : Album {
             name: AlbumScreen.album-name;
-            artist: AlbumScreen.album-arist;
             image: AlbumScreen.album-art;
+            artist: AlbumScreen.album-artist;
         }
 
         if (is-loading) : HorizontalBox {
@@ -187,19 +319,20 @@ export component Search inherits Rectangle {
 
 export global SearchScreen {
     in property <[SearchData]> search_results;
-    callback play_track(string, string, int); //name, artist, result-type ([0,1,2] => [song, album, artist])
+    callback play_track(string, string, int); //name, url, result-type ([0,1,2] => [song, album, artist])
 
     in-out property <bool> loading-ball-position; //changes every 500ms, false = left, true = right, used for animating the loading ball, 
     in-out property <bool> is-loading; //should display the loading screen
     in-out property <bool> showing-album;
+
+    callback add_to_queue(string, string); //name, url
 }
 
 export global AlbumScreen {
     in property <[AlbumTrackData]> album_tracks;
     in property <string> album-name;
-    in property <string> album-arist;
+    in property <string> album-artist;
     in property <image> album-art;
-
 
 }
 
