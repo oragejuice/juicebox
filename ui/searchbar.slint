@@ -20,13 +20,15 @@ component ScreenButton inherits Rectangle {
         }
     }
     horizontal-stretch: 100%;
-    
 }
 
 export component SearchBar inherits Rectangle {
 
     out property <int> current-item;
     callback accepted(string);
+
+    callback tab-changed(int);
+
 
     padding-top: 3px;
     VerticalLayout {
@@ -35,24 +37,37 @@ export component SearchBar inherits Rectangle {
             HorizontalLayout {
                 home := ScreenButton {
                     name: "home";
-                    clicked => {current-item = 0}
+                    clicked => {
+                        current-item = 0;
+                        tab-changed(0);
+                    }
                     is-selected => {current-item == 0}
                 }
                 search := ScreenButton {
                     name: "search";
-                    clicked => {current-item = 1}
+                    clicked => {
+                        current-item = 1;
+                        tab-changed(1);
+
+                    }
                     is-selected => {current-item == 1}
 
                 }
                 playlists := ScreenButton {
                     name: "playlists";
-                    clicked => {current-item = 2}
-                    is-selected => {current-item == 3}
+                    clicked => {
+                        current-item = 2;
+                        tab-changed(2);
+                    }
+                    is-selected => {current-item == 2}
 
                 }
                 settings := ScreenButton {
                     name: "settings";
-                    clicked => {current-item = 3}
+                    clicked => {
+                        current-item = 3;
+                        tab-changed(3);
+                    }
                     is-selected => {current-item == 3}
                 }
             }

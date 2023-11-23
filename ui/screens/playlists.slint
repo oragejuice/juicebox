@@ -1,9 +1,103 @@
+
+import { ScrollView , ListView} from "std-widgets.slint";
+
+
+export struct PlaylistData {
+    name: string,
+    size: int,
+    image: image
+}
+
+
+component PlaylistResult inherits Rectangle {
+    height: 64px;
+    in property <string> name <=> title.text;
+    in property <int> size;
+    in property <image> image <=> img.source;
+    in property <int> index;
+
+    Rectangle { 
+
+        padding: 2px;
+        inner := Rectangle {
+            height: 60px;
+            border-radius: 6px;
+            background: #1A1A1A;
+            touch := TouchArea {
+                HorizontalLayout {
+                    padding: 5px;
+                    padding-right: 10px;
+                    Rectangle {
+                        width: 50px;
+                        height: 50px;
+                        img := Image {
+                            width: 50px;
+                            height: 50px;
+                        }
+                        border-radius: 5px;
+                        clip: true;
+                        border-color: #ffffff;
+                    }
+                    Rectangle {
+                        
+                        HorizontalLayout {
+                        alignment: space-between;
+                        VerticalLayout {
+                            alignment: start;
+                            padding-top: 5px;
+                            padding-left: 10px;
+                            spacing: 2px;
+                            title := Text {
+                                font-size: 18px;
+                                color: #fff;
+                                overflow: elide;
+                            }
+                            sub_text := Text {
+                                font-size: 12px;
+                                text: size;
+                                color: #585858;
+                                overflow: elide;
+                            }
+
+                        }
+
+                        }
+
+                    }
+
+            }
+        }
+
+        }
+    }
+}
+
 export component Playlists inherits Rectangle {
-    background: #2b2b2b;
+    background: #0E0E0E;
     min-width: 460px;
 
-    Text {
-        text: "playlists";
+    in property <[PlaylistData]> playlists <=> PlaylistsScreen.playlists;
+
+    VerticalLayout {
+        alignment: start;
+        height: 100%;
+        Rectangle {
+            height: 15px;
+        }   
+        ListView {
+            height: 100%;
+            for result[i] in playlists : PlaylistResult {
+                name: result.name;
+                size: result.size;
+                image: result.image;
+                index: i;
+            }
+        }
     }
     
+
+}
+
+export global PlaylistsScreen {
+    in-out property <[PlaylistData]> playlists;
 }

@@ -3,11 +3,13 @@ mod controller;
 mod scraper;
 mod storage;
 mod stopwatch;
+mod playlist;
 
 use std::{rc::Rc, sync::{Arc, atomic::AtomicBool}, path::Path, time::Duration};
 
 use controller::MediaControlIns;
-use slint::{ModelRc, VecModel, Image, SharedString};
+use playlist::Playlist;
+use slint::{ModelRc, VecModel, Image, SharedString, SharedPixelBuffer, Rgb8Pixel};
 use tokio::sync::{mpsc, Mutex};
 use rodio::{OutputStream, Sink};
 
@@ -65,8 +67,8 @@ async fn main() -> Result<(), slint::PlatformError> {
 
     let is_loading_song: AtomicBool = AtomicBool::new(false);
 
+    let playlists: Vec<Playlist> = playlist::load_playlists().expect("oh dear... failed to load the playlists");
 
-    //let is_loading_song_playback = is_loading_song.clone();
     let playback_gui_weak  = gui.as_weak();
     let playback_controller = controller.clone();
     let playback_loop: mpsc::UnboundedSender<Option<String>> = juiceloop!(
@@ -241,6 +243,63 @@ async fn main() -> Result<(), slint::PlatformError> {
         }
     );
 
+
+
+    let playlist_gui_weak = gui.as_weak();
+    let playlists_loop: mpsc::UnboundedSender<Option<playlist::PlaylistIns>> = juiceloop!(
+        Option<playlist::PlaylistIns>,
+        ins,
+        results,
+        async move {ins},
+        {
+            match results {
+                playlist::PlaylistIns::RELOAD => {
+                    let p = playlist::load_playlists();
+                    match p {
+                        Ok(playlists) => {
+                            let gui_copy = playlist_gui_weak.clone();
+
+                            let _ = slint::invoke_from_event_loop(move || {
+                                let gui = gui_copy.unwrap();
+
+                                let data: Vec<PlaylistData> = playlists.iter().map(|p| {
+                                    let img_result = match p.get_tracks().get(0) {
+                                        Some(track) => {
+                                            let path: &String = &track.image_path;
+                                            let i = Image::load_from_path(Path::new(path));
+                                            match i {
+                                                Ok(image) => image,
+                                                Err(_) => {
+                                                    println!("failed to load image from cache when loading playlist");
+                                                    //TODO make this redownload the track image :/
+                                                    todo!()
+                                                },
+                                            }
+                                        },
+                                        None => {
+                                            Image::from_rgb8(SharedPixelBuffer::<Rgb8Pixel>::new(128,128))
+                                        },
+                                    };
+
+                                    PlaylistData {
+                                        name: SharedString::from(p.get_name()),
+                                        image: img_result,
+                                        size: (p.get_tracks().len() as i32)
+                                    }
+                                }).collect();
+                                let playlists_rc = ModelRc::from(Rc::new(VecModel::from(data)).clone());
+                                gui.global::<PlaylistsScreen>().set_playlists(playlists_rc);
+                            });
+                        },
+                        Err(_) => eprintln!("Error loading playlists for some reason")
+                    }
+                },
+                playlist::PlaylistIns::DELETE => (),
+            }
+        }
+
+    );
+
     gui.on_play_pause({
         move || {
             let _ = media_control_loop.send(Some(MediaControlIns::TogglePausePlay));
@@ -277,7 +336,6 @@ async fn main() -> Result<(), slint::PlatformError> {
                             //0 = track
                             gui.global::<SearchScreen>().invoke_play_track(name.clone().into(), url.into(), 0);
                             println!("played next song in queue {}", name);
-                            //dbg!(&con.queue);
                         });
                         dbg!(&con.queue);
                     }
@@ -310,6 +368,7 @@ async fn main() -> Result<(), slint::PlatformError> {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     });
+
 
     gui.global::<SearchScreen>().on_play_track({
         move |_, url, result_type| {
@@ -348,6 +407,22 @@ async fn main() -> Result<(), slint::PlatformError> {
     });
 
 
-    
+    gui.global::<SearchScreen>().on_add_to_playlist(move |name, url| {
+        println!("add to playlist... {}, {}", name, url);
+    });
+
+    gui.on_tab_changed(move |win| {
+        match win {
+            0 => (),
+            1 => (),
+            2 => {
+                let _ = playlists_loop.send(Some(playlist::PlaylistIns::RELOAD));
+            },
+            3 => (),
+            _ => ()
+        }
+    });
+
+
     gui.run()
 }

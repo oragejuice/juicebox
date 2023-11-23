@@ -1,10 +1,10 @@
 
 import {Sidebar, SideBarInfo} from "sidebar.slint";
 import {SearchBar} from "searchbar.slint";
-import {Home, Search, Playlists, Settings, SearchScreen, AlbumScreen} from "screens/screens.slint";
+import {Home, Search, Playlists, Settings, SearchScreen, AlbumScreen, PlaylistsScreen} from "screens/screens.slint";
 import { TabWidget , VerticalBox} from "std-widgets.slint";
 
-export { SearchScreen, SideBarInfo, AlbumScreen}
+export { SearchScreen, SideBarInfo, AlbumScreen, PlaylistsScreen}
 
 export component App inherits Window {
     preferred-width: 640px;
@@ -13,8 +13,8 @@ export component App inherits Window {
     callback skip_back <=> sidebar.skip_back;
     callback play_pause <=> sidebar.play_pause;
     callback skip_forward <=> sidebar.skip_forward;
-
     callback searched <=> search_bar.accepted;
+    callback tab-changed <=> search_bar.tab-changed;
 
     in property <string> name;
     in-out property <string> song-title <=> sidebar.song-title;

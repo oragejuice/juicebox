@@ -1,5 +1,6 @@
 
 import { ListView , HorizontalBox, VerticalBox} from "std-widgets.slint";
+//import { Search } from "screens.slint";
 
 struct SearchData {
     name: string,
@@ -257,7 +258,7 @@ export component SearchResult inherits Rectangle {
                                     }
                                     TouchArea {
                                         clicked => {
-                                            debug("added to playlist!")
+                                            SearchScreen.add-to-playlist(root.name, root.url);
                                         }
                                     }
                                 }
@@ -326,6 +327,7 @@ export global SearchScreen {
     in-out property <bool> showing-album;
 
     callback add_to_queue(string, string); //name, url
+    callback add_to_playlist(string, string); //name, url
 }
 
 export global AlbumScreen {
