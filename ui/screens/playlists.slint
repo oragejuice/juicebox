@@ -1,5 +1,5 @@
 
-import { ScrollView , ListView} from "std-widgets.slint";
+import { ScrollView , ListView, LineEdit, Button} from "std-widgets.slint";
 
 
 export struct PlaylistData {
@@ -33,6 +33,7 @@ component PlaylistResult inherits Rectangle {
                         img := Image {
                             width: 50px;
                             height: 50px;
+                            image-rendering: pixelated;
                         }
                         border-radius: 5px;
                         clip: true;
@@ -60,6 +61,8 @@ component PlaylistResult inherits Rectangle {
                             }
 
                         }
+                        
+                        //add a delete playlist button with confirmation
 
                         }
 
@@ -75,6 +78,8 @@ component PlaylistResult inherits Rectangle {
 export component Playlists inherits Rectangle {
     background: #0E0E0E;
     min-width: 460px;
+
+    property <bool> making-new-playlist;
 
     in property <[PlaylistData]> playlists <=> PlaylistsScreen.playlists;
 
@@ -94,10 +99,102 @@ export component Playlists inherits Rectangle {
             }
         }
     }
+
+
+    //new playlist button
+    Rectangle {
+        background: #00000000;
+        x: parent.width - self.width - 25px;
+        y: parent.height - self.height - 25px;
+        width: 35px;
+        height: 35px;
+        TouchArea {
+            Image {
+                source: @image-url("../img/plus.svg");
+                width: 35px;
+                height: 35px;
+            }
+            clicked => {
+                making-new-playlist = !making-new-playlist;
+            }
+        }
+    }
+
+    if (making-new-playlist) : Rectangle {
+        Rectangle {
+            height:100%;
+            width: 100%; 
+            background: #5b5b5b; 
+            Rectangle {
+                width: 80%;
+                VerticalLayout {
+                    spacing: 5px;
+                    Rectangle {
+                        height: 25px;
+                        Text {
+                            text: "New Playlist";
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                        }
+                    }
+                    name := LineEdit {
+                        height: 20px;
+                        placeholder-text: "name";
+                    }
+                    Rectangle {
+                        height: 20px;
+                        HorizontalLayout {
+                            spacing: 10px;
+                            Rectangle {
+                                background: ok-touch.has-hover ? #8b8b8b : #5b5b5b;
+                                border-color: #8b8b8b;
+                                border-radius: 5px;
+                                border-width: 1px;
+                                height: 20px;
+                                ok_touch := TouchArea {
+                                    Text {
+                                        text: "ok";
+                                        horizontal-alignment: center;
+                                    }
+                                    clicked => {
+                                        PlaylistsScreen.new-playlist(name.text);
+                                        making-new-playlist = false;
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                background: cancel-touch.has-hover ? #8b8b8b : #5b5b5b;
+                                border-color: #8b8b8b;
+                                border-radius: 5px;
+                                border-width: 1px;
+                                height: 20px;
+                                width: 50%;
+                                cancel_touch := TouchArea {
+                                    Text {
+                                        text: "cancel";
+                                        horizontal-alignment: center;
+                                    }
+                                    clicked => {
+                                        making-new-playlist = false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        x: (root.width / 2) - (self.width / 2);
+        y: (root.height / 2) - (self.height / 2);
+        height: 80px;
+        width: 300px;
+    }
     
 
 }
 
 export global PlaylistsScreen {
     in-out property <[PlaylistData]> playlists;
+    callback new_playlist(string);
 }

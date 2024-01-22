@@ -7,7 +7,7 @@ mod playlist;
 
 use std::{rc::Rc, sync::{Arc, atomic::AtomicBool}, path::Path, time::Duration};
 
-use controller::MediaControlIns;
+use controller::{MediaControlIns, new};
 use playlist::Playlist;
 use slint::{ModelRc, VecModel, Image, SharedString, SharedPixelBuffer, Rgb8Pixel};
 use tokio::sync::{mpsc, Mutex};
@@ -68,6 +68,7 @@ async fn main() -> Result<(), slint::PlatformError> {
     let is_loading_song: AtomicBool = AtomicBool::new(false);
 
     let playlists: Vec<Playlist> = playlist::load_playlists().expect("oh dear... failed to load the playlists");
+    let playlist_selection: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
     let playback_gui_weak  = gui.as_weak();
     let playback_controller = controller.clone();
@@ -406,21 +407,35 @@ async fn main() -> Result<(), slint::PlatformError> {
         });
     });
 
-
+    let add_playlist_selection = playlist_selection.clone();
     gui.global::<SearchScreen>().on_add_to_playlist(move |name, url| {
-        println!("add to playlist... {}, {}", name, url);
+        println!("add to playlist selection.");
+        // add_playlist_selection.lock().await.push(url);
+        // dbg!(add_playlist_selection);
+
     });
 
+    let aplaylist_loop = Arc::new(playlists_loop);
+    let aplaylist_loop_tab_changed = aplaylist_loop.clone();
     gui.on_tab_changed(move |win| {
         match win {
             0 => (),
             1 => (),
             2 => {
-                let _ = playlists_loop.send(Some(playlist::PlaylistIns::RELOAD));
+                let _ = aplaylist_loop_tab_changed.send(Some(playlist::PlaylistIns::RELOAD));
             },
             3 => (),
             _ => ()
         }
+
+    });
+
+    let aplaylist_loop_new_playlist = aplaylist_loop.clone();
+    gui.global::<PlaylistsScreen>().on_new_playlist(move |name| {
+        let filename = scraper::sanitize_filename(name.to_string());
+        let new_playlist = playlist::Playlist::new(&name.to_string(), &filename);
+        playlist::save_playlist(&new_playlist); //TODO handle this error
+        let _ = aplaylist_loop_new_playlist.send(Some(playlist::PlaylistIns::RELOAD));
     });
 
 
